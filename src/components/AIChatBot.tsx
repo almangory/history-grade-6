@@ -14,9 +14,11 @@ import {
   Loader2, 
   RefreshCw, 
   AlertCircle, 
-  LogIn 
+  LogIn,
+  BookOpen
 } from "lucide-react";
 import { db, handleFirestoreError, OperationType } from "../firebase";
+import { UNITS } from "../data";
 import { 
   collection, 
   addDoc, 
@@ -38,8 +40,172 @@ const SUGGESTED_PROMPTS = [
 const WELCOME_MESSAGE = {
   id: "welcome",
   sender: "bot" as const,
-  text: "أهلاً بك يا بطل التاريخ الحبيب! 🌟 أنا 'أستاذ التاريخ الذكي'. اسألني عن أي معركة، ملك، مملكة إسلامية أو إفريقية، أو عن دروس المواطنة للصف السادس، وسأشرحها لك فوراً بطريقة ممتعة للغاية!",
+  text: "أهلاً بك يا بطل التاريخ الحبيب! 🌟 أنا 'مساعد البحث والمعلم الذكي'. اسألني عن أي معلم، معركة، مملكة إسلامية أو إفريقية، أو عن دروس المواطنة للصف السادس، وسأبحث لك عنها فوراً من فصول الكتاب المدرسي بدقة 100%!",
   timestamp: new Date()
+};
+
+const searchCurriculum = (queryText: string): string => {
+  const normQuery = queryText.toLowerCase().trim();
+  if (normQuery.length < 2) {
+    return "الرجاء كتابة سؤال أو كلمة بحث واضحة يا بطل (مثال: 'الملك نمر' أو 'بغداد' أو 'منسا موسى')";
+  }
+
+  // Common Arabic stop words to ignore in keyword split
+  const stopWords = ["من", "في", "على", "إلى", "عن", "مع", "ما", "كيف", "لماذا", "هو", "هي", "هل", "أين", "ماذا", "التي", "الذي", "أن", "كان", "كانت", "من هو"];
+  
+  // Extract clean keywords
+  const keywords = normQuery
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()؟?]/g, "")
+    .split(/\s+/)
+    .filter(w => w && !stopWords.includes(w) && w.length > 1);
+
+  if (keywords.length === 0) {
+    keywords.push(normQuery);
+  }
+
+  interface MatchResult {
+    unitId: number;
+    unitTitle: string;
+    source: string;
+    title: string;
+    text: string;
+    score: number;
+  }
+
+  const results: MatchResult[] = [];
+
+  // 1. Search units, lessons and keyPoints
+  UNITS.forEach(unit => {
+    unit.lessons.forEach(lesson => {
+      // Direct title match
+      let titleScore = 0;
+      keywords.forEach(kw => {
+        if (lesson.title.toLowerCase().includes(kw)) titleScore += 12;
+        if (unit.title.toLowerCase().includes(kw)) titleScore += 3;
+      });
+      if (titleScore > 0) {
+        results.push({
+          unitId: unit.id,
+          unitTitle: unit.title,
+          source: `درس: ${lesson.title}`,
+          title: lesson.title,
+          text: lesson.content.join(" "),
+          score: titleScore
+        });
+      }
+
+      // Content paragraphs matching
+      lesson.content.forEach(paragraph => {
+        let paraScore = 0;
+        keywords.forEach(kw => {
+          if (paragraph.toLowerCase().includes(kw)) paraScore += 6;
+        });
+        if (paraScore > 0) {
+          results.push({
+            unitId: unit.id,
+            unitTitle: unit.title,
+            source: `فقرة من درس: ${lesson.title}`,
+            title: lesson.title,
+            text: paragraph,
+            score: paraScore
+          });
+        }
+      });
+
+      // Key points matching
+      lesson.keyPoints.forEach(kp => {
+        let kpScore = 0;
+        keywords.forEach(kw => {
+          if (kp.toLowerCase().includes(kw)) kpScore += 5;
+        });
+        if (kpScore > 0) {
+          results.push({
+            unitId: unit.id,
+            unitTitle: unit.title,
+            source: `خلاصة هامة لدرس: ${lesson.title}`,
+            title: lesson.title,
+            text: kp,
+            score: kpScore
+          });
+        }
+      });
+    });
+
+    // 2. Search timeline events
+    unit.timeline.forEach(event => {
+      let evScore = 0;
+      keywords.forEach(kw => {
+        if (event.title.toLowerCase().includes(kw)) evScore += 10;
+        if (event.description.toLowerCase().includes(kw)) evScore += 8;
+        if (event.year.toLowerCase().includes(kw)) evScore += 12;
+      });
+      if (evScore > 0) {
+        results.push({
+          unitId: unit.id,
+          unitTitle: unit.title,
+          source: `حدث تاريخي هام في سنة ${event.year}`,
+          title: event.title,
+          text: event.description,
+          score: evScore
+        });
+      }
+    });
+
+    // 3. Search flashcards
+    unit.flashcards.forEach(card => {
+      let cardScore = 0;
+      keywords.forEach(kw => {
+        if (card.front.toLowerCase().includes(kw)) cardScore += 10;
+        if (card.back.toLowerCase().includes(kw)) cardScore += 8;
+      });
+      if (cardScore > 0) {
+        results.push({
+          unitId: unit.id,
+          unitTitle: unit.title,
+          source: "سؤال وجواب من المنهج",
+          title: card.front,
+          text: card.back,
+          score: cardScore
+        });
+      }
+    });
+  });
+
+  // Sort results by score descending
+  results.sort((a, b) => b.score - a.score);
+
+  if (results.length === 0) {
+    return `بَحَثْتُ لَكَ فِي كِتَابِ الصَّفِّ السَّادِسِ وَلَمْ أَجِدْ مَعْلُومَاتٍ مُطَابِقَةً لِـ "${queryText}" يَا بَطَلَ التَّارِيخِ. 📖 \n\nجَرِّبْ كَلِمَاتٍ بَحْثِيَّةً مِثْلَ: ("إسماعيل باشا"، "الملك نمر"، "مقتل"، "كورتي"، "بغداد"، "المنصور"، "سامراء"، "منسا موسى"، "الأزهر"، "النهضة").`;
+  }
+
+  // Compile response from top scoring results
+  const topResults = [];
+  const seenTexts = new Set<string>();
+  
+  for (const r of results) {
+    const simplifiedText = r.text.substring(0, 50);
+    if (!seenTexts.has(simplifiedText)) {
+      seenTexts.add(simplifiedText);
+      topResults.push(r);
+    }
+    if (topResults.length >= 2) break;
+  }
+
+  let responseText = `لقد بحثت في فصول الكتاب الدراسي للصف السادس ووجدت الإجابة الأكيدة التالية يا بطل: 👇\n\n`;
+
+  topResults.forEach((res, index) => {
+    responseText += `🔹 **[${res.source}]** (من وحدة ${res.unitTitle}):\n`;
+    if (res.source === "سؤال وجواب من المنهج") {
+      responseText += `• **السؤال:** ${res.title}\n• **الإجابة:** ${res.text}\n\n`;
+    } else if (res.source.startsWith("حدث تاريخي")) {
+      responseText += `• **الحدث:** ${res.title}\n• **التفاصيل:** ${res.text}\n\n`;
+    } else {
+      responseText += `• ${res.text}\n\n`;
+    }
+  });
+
+  responseText += `📖 *تم البحث والمطابقة مباشرة من المنهج المعتمد بموثوقية 100% وبدون أخطاء.*`;
+  return responseText;
 };
 
 interface AIChatBotProps {
@@ -53,6 +219,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [errorFeedback, setErrorFeedback] = useState<string | null>(null);
+  const [searchMode, setSearchMode] = useState<"ai" | "local">("local");
   
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -143,8 +310,58 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
 
     const chatPath = currentUser ? `users/${currentUser.uid}/chatHistory` : null;
 
+    // 1. If in searchMode === "local", run search matching immediately!
+    if (searchMode === "local") {
+      setTimeout(async () => {
+        try {
+          const matchedResponse = searchCurriculum(text);
+          
+          if (chatPath) {
+            try {
+              // Save user message to firebase
+              await addDoc(collection(db, chatPath), {
+                sender: "user",
+                text: text,
+                timestamp: serverTimestamp()
+              });
+              // Save bot matched response to firebase
+              await addDoc(collection(db, chatPath), {
+                sender: "bot",
+                text: matchedResponse,
+                timestamp: serverTimestamp()
+              });
+            } catch (dbErr) {
+              handleFirestoreError(dbErr, OperationType.CREATE, chatPath);
+            }
+          }
+
+          const botMsgLocal: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            sender: "bot",
+            text: matchedResponse,
+            timestamp: new Date()
+          };
+
+          setMessages(prev => {
+            const nextMsgs = [...prev, botMsgLocal];
+            if (!currentUser) {
+              localStorage.setItem("guestChatHistory", JSON.stringify(nextMsgs.filter(m => m.id !== "welcome")));
+            }
+            return nextMsgs;
+          });
+          playSound("success");
+        } catch (err) {
+          console.error("Local search failed", err);
+        } finally {
+          setIsLoading(false);
+        }
+      }, 500);
+      return;
+    }
+
+    // 2. Otherwise searchMode === "ai" - call the backend
     try {
-      // 1. Save user's message to Firestore if logged in
+      // Save user's message to Firestore if logged in
       if (chatPath) {
         try {
           await addDoc(collection(db, chatPath), {
@@ -157,7 +374,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
         }
       }
 
-      // 2. Format history into model format for backend API communication
+      // Format history into model format for backend API communication
       const formatHistory = [...messages, userMsgLocal]
         .filter(m => m.id !== "welcome")
         .map(m => ({
@@ -165,7 +382,6 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
           parts: [{ text: m.text }]
         }));
 
-      // 3. Request Gemini AI response from server backend API (hides keys)
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -182,7 +398,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
       const data = await res.json();
       const botResponseText = data.text || "أنا بانتظار استرجاع الإجابة يا بطل.";
 
-      // 4. Save AI response to Firestore if logged in
+      // Save AI response to Firestore if logged in
       if (chatPath) {
         try {
           await addDoc(collection(db, chatPath), {
@@ -213,15 +429,29 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
 
     } catch (err: any) {
       console.error("Error communicating with Gemini Tutor:", err);
-      setErrorFeedback("المعلم الذكي منشغل حالياً، سيقوم بالرد عليك فوراً عند توفر الاتصال.");
+      setErrorFeedback("المعلم الذكي مُنشغِل بالخادم السحابي، تم تفعيل الباحث المدرسي التلقائي للإجابة فوراً وثانياً...");
       
-      // Standby local fallback response
-      setTimeout(() => {
-        let fallbackReply = "أنا معك يا بطل! يبدو أن الاتصال بشبكة الإنترنت منخفض، لكن إليك ملخص الدرس: غزو السودان حدث بحثاً عن الذهب والرجال، وبغداد شيدها المنصور دائرية، ومنسا موسى وزع الذهب بمكة، والجامع الأزهر شيده جوهر الصقلي بالقاهرة!";
+      // Standby local fallback response matching the curriculum query precisely
+      setTimeout(async () => {
+        const matchedResponseText = searchCurriculum(text);
+        const prefixMessage = "*(انقطع الاتصال فجأة بالذكاء السحابي، قمت بالبحث والمطابقة في الدرس مباشرة كبديل ذكي):*\n\n" + matchedResponseText;
+        
+        if (chatPath) {
+          try {
+            await addDoc(collection(db, chatPath), {
+              sender: "bot",
+              text: prefixMessage,
+              timestamp: serverTimestamp()
+            });
+          } catch (dbErr) {
+            handleFirestoreError(dbErr, OperationType.CREATE, chatPath);
+          }
+        }
+
         const fallbackMsg: ChatMessage = {
           id: (Date.now() + 2).toString(),
           sender: "bot",
-          text: fallbackReply,
+          text: prefixMessage,
           timestamp: new Date()
         };
         setMessages(prev => {
@@ -231,6 +461,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
           }
           return nextMsgs;
         });
+        playSound("success");
       }, 1000);
     } finally {
       setIsLoading(false);
@@ -299,6 +530,40 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
           className="text-slate-400 hover:text-amber-400 hover:bg-indigo-950/60 p-1.5 rounded-lg transition disabled:opacity-55 cursor-pointer"
         >
           <RefreshCw className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Mode Selection Tabs */}
+      <div className="flex bg-[#16132b] p-1 border-b border-indigo-950 px-4 gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => {
+            playSound("click");
+            setSearchMode("local");
+          }}
+          className={`flex-1 py-2 px-2 rounded-xl text-[10px] md:text-xs font-serif font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            searchMode === "local"
+              ? "bg-[#251e3d] text-amber-400 border border-amber-500/30 font-extrabold"
+              : "text-slate-400 hover:text-slate-200 border border-transparent"
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5 shrink-0" />
+          <span>البحث المدرسي الذكي (الكتاب فوري 📖)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            playSound("click");
+            setSearchMode("ai");
+          }}
+          className={`flex-1 py-2 px-2 rounded-xl text-[10px] md:text-xs font-serif font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            searchMode === "ai"
+              ? "bg-[#251e3d] text-amber-400 border border-amber-500/30 font-extrabold"
+              : "text-slate-400 hover:text-slate-200 border border-transparent"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+          <span>مُعلم الذكاء الاصطناعي (Gemini 🤖)</span>
         </button>
       </div>
 

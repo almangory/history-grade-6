@@ -6,3 +6,186 @@
   --font-serif: "Amiri", Georgia, serif;
 }
 
+/* Day/Night (Light/Dark) Dynamic Variable Engine */
+:root {
+  --bg-main: #09080f;
+  --bg-card: #121020;
+  --bg-item: #18152c;
+  --bg-input: #1b1930;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --border-primary: rgba(49, 46, 129, 0.6);
+}
+
+.light-theme {
+  --bg-main: #f1f5f9;  /* Soft slate background */
+  --bg-card: #ffffff;  /* Premium pure-white card background */
+  --bg-item: #e2e8f0;  /* Lighter item buttons and cards */
+  --bg-input: #f8fafc; /* Standard input background */
+  --text-primary: #0f172a;    /* High contrast dark text text-slate-900 */
+  --text-secondary: #475569;  /* Readable muted text-slate-600 */
+  --border-primary: rgba(203, 213, 225, 0.9); /* Border gray-200/slate-300 */
+  color-scheme: light;
+}
+
+/* 1. Global background color overrides for custom utility classes */
+.light-theme .bg-\[\#09080f\] {
+  background-color: var(--bg-main) !important;
+}
+.light-theme .bg-\[\#121020\] {
+  background-color: var(--bg-card) !important;
+}
+.light-theme .bg-\[\#121020\]\/90 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+.light-theme .bg-\[\#18152c\] {
+  background-color: var(--bg-item) !important;
+}
+.light-theme .bg-\[\#18152c\]\/90 {
+  background-color: rgba(226, 232, 240, 0.9) !important;
+}
+.light-theme .bg-\[\#19152b\] {
+  background-color: var(--bg-item) !important;
+}
+.light-theme .bg-\[\#1b1930\] {
+  background-color: var(--bg-input) !important;
+}
+.light-theme .bg-\[\#1e131d\] {
+  background-color: #fef3c7 !important; /* soft amber gold accent */
+  border-color: #fcd34d !important;
+}
+.light-theme .bg-\[\#17142d\] {
+  background-color: var(--bg-input) !important;
+}
+.light-theme .bg-\[\#14122d\]\/60 {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  border-color: #cbd5e1 !important;
+}
+.light-theme .bg-\[\#1a1226\]\/60 {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  border-color: #cbd5e1 !important;
+}
+.light-theme .bg-\[\#1f162e\]\/75 {
+  background-color: rgba(254, 243, 199, 0.82) !important; /* Soft yellow-gold */
+}
+.light-theme .bg-\[\#1a1122\]\/90 {
+  background-color: var(--bg-card) !important;
+}
+.light-theme .bg-\[\#110e1a\] {
+  background-color: var(--bg-input) !important;
+}
+.light-theme .bg-\[\#110e1a\]\/80 {
+  background-color: var(--bg-item) !important;
+}
+.light-theme .bg-\[\#171120\] {
+  background-color: #fffbeb !important; /* warm scroll/panel highlight */
+  border-color: #fde68a !important;
+}
+.light-theme .bg-\[\#1b1226\] {
+  background-color: #fffbdf !important;
+}
+.light-theme .bg-\[\#11241a\] {
+  background-color: #ecfdf5 !important; /* emerald alert-50 */
+  border-color: #a7f3d0 !important;
+}
+.light-theme .bg-\[\#241a11\] {
+  background-color: #fffbeb !important; /* amber alert-50 */
+  border-color: #fde68a !important;
+}
+.light-theme .bg-\[\#16132b\] {
+  background-color: var(--bg-item) !important;
+}
+.light-theme .bg-\[\#251e3d\] {
+  background-color: var(--bg-card) !important;
+}
+.light-theme .bg-\[\#1f1a3a\] {
+  background-color: var(--bg-item) !important;
+}
+
+/* Map specific backgrounds */
+.light-theme .bg-\[\#1a1738\] {
+  background-color: var(--bg-item) !important;
+}
+.light-theme .bg-\[\#0e0d1a\] {
+  background-color: var(--bg-input) !important;
+}
+.light-theme .bg-\[\#161225\] {
+  background-color: var(--bg-item) !important;
+}
+.light-theme .bg-\[\#15122b\]\/90 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+.light-theme .bg-\[\#181532\]\/90 {
+  background-color: var(--bg-item) !important;
+}
+.light-theme .bg-\[\#131126\] {
+  background-color: var(--bg-input) !important;
+}
+.light-theme .bg-\[\#131126\]\/30 {
+  background-color: rgba(241, 245, 249, 0.5) !important;
+}
+
+/* 2. Hover states overrides */
+.light-theme .hover\:bg-\[\#252244\]:hover {
+  background-color: #cbd5e1 !important;
+}
+.light-theme .hover\:bg-\[\#201c3e\]:hover {
+  background-color: #cbd5e1 !important;
+}
+.light-theme .hover\:bg-\[\#231d3d\]:hover {
+  background-color: #cbd5e1 !important;
+}
+.light-theme .hover\:bg-\[\#1c183a\]:hover {
+  background-color: #cbd5e1 !important;
+}
+
+/* 3. Border overrides */
+.light-theme .border-indigo-950,
+.light-theme .border-indigo-950\/80,
+.light-theme .border-indigo-950\/60,
+.light-theme .border-indigo-950\/50,
+.light-theme .border-indigo-950\/40,
+.light-theme .border-indigo-900\/50,
+.light-theme .border-indigo-900\/40,
+.light-theme .border-indigo-900\/30,
+.light-theme .border-slate-800\/50,
+.light-theme .border-slate-800\/30,
+.light-theme .border-slate-800\/60,
+.light-theme .border-slate-800\/40 {
+  border-color: var(--border-primary) !important;
+}
+
+/* 4. Text color transformations */
+.light-theme .text-slate-100,
+.light-theme .text-slate-150,
+.light-theme .text-slate-200,
+.light-theme .text-slate-300,
+.light-theme .text-white {
+  color: var(--text-primary) !important;
+}
+.light-theme .text-slate-400,
+.light-theme .text-slate-500 {
+  color: var(--text-secondary) !important;
+}
+
+/* Correct contrast for special colored identifiers */
+.light-theme .text-amber-400,
+.light-theme .text-amber-500 {
+  color: #c2410c !important; /* amber-800 for legibility on white/light gray */
+}
+.light-theme .text-amber-300 {
+  color: #ea580c !important; /* amber-600 */
+}
+.light-theme .text-yellow-400,
+.light-theme .text-yellow-500 {
+  color: #b45309 !important; /* amber-700 */
+}
+.light-theme .text-emerald-400 {
+  color: #047857 !important; /* emerald-700 */
+}
+
+/* Force dark footer copyright text */
+.light-theme footer p {
+  color: var(--text-secondary) !important;
+}
+

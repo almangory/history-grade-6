@@ -37,7 +37,9 @@ import {
   MapPin,
   Sparkles,
   Bot,
-  Clock
+  Clock,
+  Sun,
+  Moon
 } from "lucide-react";
 
 export default function App() {
@@ -47,6 +49,9 @@ export default function App() {
 
   // Game & User Progression States
   const [useSound, setUseSound] = useState(true);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    return (localStorage.getItem("sub_historian_theme") as "dark" | "light") || "dark";
+  });
   const [userName, setUserName] = useState<string>(() => {
     return localStorage.getItem("sub_historian_name") || "";
   });
@@ -172,7 +177,8 @@ export default function App() {
     localStorage.setItem("sub_historian_avatar", userAvatar);
     localStorage.setItem("sub_historian_score", score.toString());
     localStorage.setItem("sub_historian_badges", JSON.stringify(unlockedBadges));
-  }, [userName, userAvatar, score, unlockedBadges]);
+    localStorage.setItem("sub_historian_theme", theme);
+  }, [userName, userAvatar, score, unlockedBadges, theme]);
 
   // Achievement unlock triggers
   const unlockBadge = (badgeId: string) => {
@@ -417,7 +423,7 @@ export default function App() {
   // Loading check
   if (loadingAuth) {
     return (
-      <div className="min-h-screen bg-[#09080f] flex flex-col items-center justify-center font-serif text-slate-100 gap-3">
+      <div className={`min-h-screen bg-[#09080f] flex flex-col items-center justify-center font-serif text-slate-100 gap-3 ${theme === "light" ? "light-theme" : ""}`}>
         <Sparkles className="w-10 h-10 text-amber-500 animate-spin" />
         <p className="text-sm font-sans text-slate-400">جاري تحميل سجل البطل...</p>
       </div>
@@ -427,7 +433,21 @@ export default function App() {
   // Logged-out Welcome Parchment Style Form
   if (!userName) {
     return (
-      <div className="min-h-screen bg-[#09080f] flex items-center justify-center p-4 relative overflow-hidden font-serif">
+      <div className={`min-h-screen bg-[#09080f] flex items-center justify-center p-4 relative overflow-hidden font-serif ${theme === "light" ? "light-theme" : ""}`}>
+        {/* Floating Theme Switcher on onboarding */}
+        <div className="absolute top-4 right-4 z-50">
+          <button
+            onClick={() => {
+              playSound("click");
+              setTheme(theme === "dark" ? "light" : "dark");
+            }}
+            title={theme === "dark" ? "التحويل للوضع النهاري" : "التحويل للوضع الليلي"}
+            className="p-2.5 rounded-xl border border-indigo-950 bg-[#18152c] text-amber-400 hover:scale-110 active:scale-95 transition cursor-pointer shadow-md"
+          >
+            {theme === "dark" ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-700" />}
+          </button>
+        </div>
+
         {/* Animated Background Ornaments */}
         <div className="absolute top-10 left-10 w-48 h-48 bg-indigo-900/30 rounded-full filter blur-3xl opacity-50 animate-pulse"></div>
         <div className="absolute bottom-10 right-10 w-64 h-64 bg-amber-900/10 rounded-full filter blur-2xl opacity-40 animate-pulse"></div>
@@ -557,7 +577,7 @@ export default function App() {
   const selectedUnit = selectedUnitId ? UNITS.find(u => u.id === selectedUnitId) : null;
 
   return (
-    <div className="min-h-screen bg-[#09080f] text-slate-150 font-sans flex flex-col">
+    <div className={`min-h-screen bg-[#09080f] text-slate-150 font-sans flex flex-col ${theme === "light" ? "light-theme" : ""}`}>
       {/* Visual top bar */}
       <div className="h-1 bg-gradient-to-r from-amber-500 via-indigo-600 to-amber-700 shrink-0"></div>
 
@@ -586,6 +606,18 @@ export default function App() {
 
           {/* User Score Ribbon */}
           <div className="flex items-center gap-3 select-none flex-wrap justify-center font-sans">
+            {/* Theme Toggle */}
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setTheme(theme === "dark" ? "light" : "dark");
+              }}
+              title={theme === "dark" ? "التحويل للوضع النهاري" : "التحويل للوضع الليلي"}
+              className="p-2.5 rounded-xl border border-indigo-950/60 bg-[#18152c] text-amber-400 hover:scale-105 active:scale-95 transition cursor-pointer shadow-sm flex items-center justify-center"
+            >
+              {theme === "dark" ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-700" />}
+            </button>
+
             {/* Sound Toggle */}
             <button
               onClick={() => setUseSound(!useSound)}
