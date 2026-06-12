@@ -538,7 +538,7 @@ export default function App() {
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-amber-600 to-amber-750 hover:from-amber-500 hover:to-amber-650 text-white font-serif font-bold text-lg py-4 rounded-xl shadow-lg border border-transparent hover:scale-[1.01] active:scale-[0.99] transition duration-200 cursor-pointer"
+                className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-serif font-bold text-lg py-4 rounded-xl shadow-lg border border-transparent hover:scale-[1.01] active:scale-[0.99] transition duration-200 cursor-pointer"
               >
                 انطلاق في رحلة التاريخ الممتعة 🚀
               </button>
@@ -800,7 +800,7 @@ export default function App() {
                     <span>افتح البوصلة التاريخية والخرائط</span>
                   </button>
                 </div>
-                <div className="w-24 h-24 stroke-amber-550 text-amber-400 shrink-0">
+                <div className="w-24 h-24 stroke-amber-500 text-amber-400 shrink-0">
                   <Compass className="w-full h-full opacity-40 animate-[spin_180s_linear_infinite]" />
                 </div>
               </div>
@@ -825,7 +825,7 @@ export default function App() {
                     <span>دردش مع أستاذ التاريخ الذكي</span>
                   </button>
                 </div>
-                <div className="w-24 h-24 stroke-amber-550 text-amber-400 shrink-0 flex items-center justify-center">
+                <div className="w-24 h-24 stroke-amber-500 text-amber-400 shrink-0 flex items-center justify-center">
                   <Bot className="w-20 h-20 opacity-40 text-amber-400 animate-pulse" />
                 </div>
               </div>
@@ -935,7 +935,7 @@ export default function App() {
               <div className="space-y-3 relative text-right flex-1 z-10">
                 <span className="bg-[#1e121e] text-amber-400 border border-amber-900/40 text-xs px-2.5 py-0.5 rounded-full font-bold">الوحدة {selectedUnit.id}</span>
                 <h2 className="text-2xl md:text-3xl font-bold font-serif text-amber-400">{selectedUnit.title}</h2>
-                <p className="text-xs md:text-sm text-slate-350 leading-relaxed font-sans max-w-2xl">{selectedUnit.description}</p>
+                <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-sans max-w-2xl">{selectedUnit.description}</p>
                 
                 {/* Visual subtab navigator */}
                 <div className="flex flex-wrap gap-2 pt-2 select-none">
@@ -1141,7 +1141,7 @@ export default function App() {
                         <div className={`w-2 h-2 rounded-full ${timelineIndex === idx ? "bg-white" : "bg-amber-500"}`}></div>
                       </div>
                       
-                      <span className={`text-sm font-bold font-serif mt-2 block ${timelineIndex === idx ? "text-amber-400 font-extrabold" : "text-slate-350"}`}>
+                      <span className={`text-sm font-bold font-serif mt-2 block ${timelineIndex === idx ? "text-amber-400 font-extrabold" : "text-slate-300"}`}>
                         {ev.year}
                       </span>
                       <span className="text-[10px] text-slate-500 font-sans block max-w-[80px] truncate">{ev.title}</span>
@@ -1160,7 +1160,7 @@ export default function App() {
                   <div className="bg-[#110e1a]/80 rounded-xl border border-indigo-950/50 p-4 aspect-square flex flex-col items-center justify-center h-full text-center">
                     <Star className="w-14 h-14 text-amber-400 animate-spin-slow mb-2 fill-amber-400" />
                     <span className="text-slate-100 font-serif font-bold text-xs uppercase tracking-wider">سجل المؤرخ</span>
-                    <span className="text-[10px] text-slate-450 font-sans">الوحدة {selectedUnit.id} • السنة {selectedUnit.timeline[timelineIndex].year}</span>
+                    <span className="text-[10px] text-slate-400 font-sans">الوحدة {selectedUnit.id} • السنة {selectedUnit.timeline[timelineIndex].year}</span>
                   </div>
                 </div>
               </div>
@@ -1199,7 +1199,7 @@ export default function App() {
                           : selectedUnit.flashcards[flashcardIdx].front}
                       </h4>
 
-                      <span className={`text-[10px] absolute bottom-4 bg-[#1b1930] text-slate-200 px-3 py-1 rounded-full font-bold border border-indigo-900/30 ${flashcardFlipped ? "bg-amber-850/40 text-amber-200" : ""}`}>
+                      <span className={`text-[10px] absolute bottom-4 bg-[#1b1930] text-slate-200 px-3 py-1 rounded-full font-bold border border-indigo-900/30 ${flashcardFlipped ? "bg-amber-900/40 text-amber-200" : ""}`}>
                         {flashcardFlipped ? "انقر لرؤية السؤال ↩" : "انقر لرؤية الإجابة ↪"}
                       </span>
                     </div>
@@ -1218,7 +1218,7 @@ export default function App() {
                     >
                       <ChevronRight className="w-5 h-5 animate-pulse" />
                     </button>
-                    <span className="text-xs font-bold text-slate-350 font-sans">
+                    <span className="text-xs font-bold text-slate-300 font-sans">
                       البطاقة {flashcardIdx + 1} من {selectedUnit.flashcards.length}
                     </span>
                     <button
@@ -1246,7 +1246,7 @@ export default function App() {
                         <h4 className="text-lg font-bold font-serif text-slate-100">الاختبار الشامل للوحدة</h4>
                         <p className="text-xs text-slate-400 mt-1 font-sans">السؤال {quizIdx + 1} من {quizQuestions.length}</p>
                       </div>
-                      <span className="bg-amber-850 text-white font-sans text-xs px-2.5 py-1 rounded border border-amber-600/30">المرحلة {quizIdx + 1}</span>
+                      <span className="bg-amber-900 text-white font-sans text-xs px-2.5 py-1 rounded border border-amber-600/30">المرحلة {quizIdx + 1}</span>
                     </div>
 
                     <p className="text-lg md:text-xl font-bold font-serif text-slate-200 leading-relaxed text-right">
@@ -1288,7 +1288,7 @@ export default function App() {
                     {selectedOption && (
                       <div className="bg-[#171120] p-4 rounded-xl border border-indigo-950/65 animate-[fadeIn_0.5s_ease-out] text-right space-y-1.5 shrink-0 font-serif">
                         <span className="text-amber-400 font-bold block text-sm">💡 الشرح والتبسيط من منهج الصف السَّادس:</span>
-                        <p className="text-xs md:text-sm text-slate-250 leading-relaxed">
+                        <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
                           {quizQuestions[quizIdx].explanation || "الإجابة الصحيحة مذكورة بالدروس لتعزيز كفاءتك المعرفية."}
                         </p>
                       </div>
@@ -1316,7 +1316,7 @@ export default function App() {
 
                     {/* Progress score feedback reward */}
                     <div className="inline-flex items-center gap-2.5 bg-[#1b1226] px-6 py-3 rounded-2xl border border-indigo-950/80">
-                      <Star className="w-5 h-5 text-amber-450 fill-amber-450" />
+                      <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
                       <span className="text-sm font-serif font-bold text-amber-300 text-right">
                         لقد نلت +{quizCorrectAnswers * 10} نقاط معرفة إضافية تضاف لرصيدك!
                       </span>
@@ -1339,7 +1339,7 @@ export default function App() {
                           handlePlaySound("click");
                           setQuizMode("none");
                         }}
-                        className="bg-amber-800 text-white px-5 py-2.5 rounded-xl hover:bg-amber-750 text-xs font-bold transition shadow border border-amber-600/30 cursor-pointer"
+                        className="bg-amber-800 text-white px-5 py-2.5 rounded-xl hover:bg-amber-700 text-xs font-bold transition shadow border border-amber-600/30 cursor-pointer"
                       >
                         العودة لقراءة المنهج
                       </button>
@@ -1416,7 +1416,7 @@ export default function App() {
                         handlePlaySound("click");
                         setQuizMode("none");
                       }}
-                      className="bg-amber-800 text-white px-5 py-2.5 rounded-xl hover:bg-amber-750 text-xs font-bold transition shadow border border-amber-600/30 cursor-pointer"
+                      className="bg-amber-800 text-white px-5 py-2.5 rounded-xl hover:bg-amber-700 text-xs font-bold transition shadow border border-amber-600/30 cursor-pointer"
                     >
                       الرجوع لقراءة الفصول
                     </button>
@@ -1512,7 +1512,7 @@ export default function App() {
                         handlePlaySound("click");
                         setQuizMode("none");
                       }}
-                      className="bg-amber-800 hover:bg-amber-750 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow mx-auto block cursor-pointer border border-amber-600/20"
+                      className="bg-amber-800 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow mx-auto block cursor-pointer border border-amber-600/20"
                     >
                       الرجوع لدروس الفصل
                     </button>
@@ -1527,7 +1527,7 @@ export default function App() {
       {/* Visual bottom parchment style design separator */}
       <footer className="bg-[#09080f]/90 border-t border-indigo-950/65 py-6 text-center text-slate-400 text-xs shrink-0 font-sans mt-auto">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="font-serif text-slate-350 select-none">© {new Date().getFullYear()} المُؤَرِّخ الصَّغِير – جُمْهُورِيَّةُ السُّودَانِ - مَنَاهِجُ المَرْكَزُ القَوْمِي لِلمَنَاهِجِ وَالبَحْثِ التَّرْبَوِي بِبَخْتِ الرِّضَا</p>
+          <p className="font-serif text-slate-300 select-none">© {new Date().getFullYear()} المُؤَرِّخ الصَّغِير – جُمْهُورِيَّةُ السُّودَانِ - مَنَاهِجُ المَرْكَزُ القَوْمِي لِلمَنَاهِجِ وَالبَحْثِ التَّرْبَوِي بِبَخْتِ الرِّضَا</p>
           <div className="flex gap-4">
             <button
               onClick={() => {
@@ -1538,7 +1538,7 @@ export default function App() {
             >
               لوحة الأوسمة
             </button>
-            <span className="text-slate-650">•</span>
+            <span className="text-slate-500">•</span>
             <button
               onClick={() => {
                 handlePlaySound("click");

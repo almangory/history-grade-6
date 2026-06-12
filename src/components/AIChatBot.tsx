@@ -61,10 +61,26 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, isHistoryLoading]);
 
-  // Load chat history from Firestore if logged in
+  // Load chat history from Firestore if logged in, or localStorage if guest
   useEffect(() => {
     if (!currentUser) {
-      setMessages([WELCOME_MESSAGE]);
+      const guestHistory = localStorage.getItem("guestChatHistory");
+      if (guestHistory) {
+        try {
+          const parsed = JSON.parse(guestHistory);
+          setMessages([
+            WELCOME_MESSAGE,
+            ...parsed.map((m: any) => ({
+              ...m,
+              timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
+            }))
+          ]);
+        } catch {
+          setMessages([WELCOME_MESSAGE]);
+        }
+      } else {
+        setMessages([WELCOME_MESSAGE]);
+      }
       return;
     }
 
@@ -109,7 +125,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
   }, [currentUser]);
 
   const handleSendMessage = async (text: string) => {
-    if (!text.trim() || isLoading || !currentUser) return;
+    if (!text.trim() || isLoading) return;
     
     playSound("click");
     setErrorFeedback(null);
@@ -125,22 +141,24 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
     setUserAnswerInput("");
     setIsLoading(true);
 
-    const chatPath = `users/${currentUser.uid}/chatHistory`;
+    const chatPath = currentUser ? `users/${currentUser.uid}/chatHistory` : null;
 
     try {
-      // 1. Save user's message to Firestore
-      try {
-        await addDoc(collection(db, chatPath), {
-          sender: "user",
-          text: text,
-          timestamp: serverTimestamp()
-        });
-      } catch (dbErr) {
-        handleFirestoreError(dbErr, OperationType.CREATE, chatPath);
+      // 1. Save user's message to Firestore if logged in
+      if (chatPath) {
+        try {
+          await addDoc(collection(db, chatPath), {
+            sender: "user",
+            text: text,
+            timestamp: serverTimestamp()
+          });
+        } catch (dbErr) {
+          handleFirestoreError(dbErr, OperationType.CREATE, chatPath);
+        }
       }
 
       // 2. Format history into model format for backend API communication
-      const formatHistory = messages
+      const formatHistory = [...messages, userMsgLocal]
         .filter(m => m.id !== "welcome")
         .map(m => ({
           role: m.sender === "user" ? "user" : "model",
@@ -164,15 +182,17 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
       const data = await res.json();
       const botResponseText = data.text || "أنا بانتظار استرجاع الإجابة يا بطل.";
 
-      // 4. Save AI response to Firestore
-      try {
-        await addDoc(collection(db, chatPath), {
-          sender: "bot",
-          text: botResponseText,
-          timestamp: serverTimestamp()
-        });
-      } catch (dbErr) {
-        handleFirestoreError(dbErr, OperationType.CREATE, chatPath);
+      // 4. Save AI response to Firestore if logged in
+      if (chatPath) {
+        try {
+          await addDoc(collection(db, chatPath), {
+            sender: "bot",
+            text: botResponseText,
+            timestamp: serverTimestamp()
+          });
+        } catch (dbErr) {
+          handleFirestoreError(dbErr, OperationType.CREATE, chatPath);
+        }
       }
 
       const botMsgLocal: ChatMessage = {
@@ -182,7 +202,13 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
         timestamp: new Date()
       };
 
-      setMessages(prev => [...prev, botMsgLocal]);
+      setMessages(prev => {
+        const nextMsgs = [...prev, botMsgLocal];
+        if (!currentUser) {
+          localStorage.setItem("guestChatHistory", JSON.stringify(nextMsgs.filter(m => m.id !== "welcome")));
+        }
+        return nextMsgs;
+      });
       playSound("success");
 
     } catch (err: any) {
@@ -192,12 +218,19 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
       // Standby local fallback response
       setTimeout(() => {
         let fallbackReply = "أنا معك يا بطل! يبدو أن الاتصال بشبكة الإنترنت منخفض، لكن إليك ملخص الدرس: غزو السودان حدث بحثاً عن الذهب والرجال، وبغداد شيدها المنصور دائرية، ومنسا موسى وزع الذهب بمكة، والجامع الأزهر شيده جوهر الصقلي بالقاهرة!";
-        setMessages(prev => [...prev, {
+        const fallbackMsg: ChatMessage = {
           id: (Date.now() + 2).toString(),
           sender: "bot",
           text: fallbackReply,
           timestamp: new Date()
-        }]);
+        };
+        setMessages(prev => {
+          const nextMsgs = [...prev, fallbackMsg];
+          if (!currentUser) {
+            localStorage.setItem("guestChatHistory", JSON.stringify(nextMsgs.filter(m => m.id !== "welcome")));
+          }
+          return nextMsgs;
+        });
       }, 1000);
     } finally {
       setIsLoading(false);
@@ -216,7 +249,10 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
       }
     ]);
 
-    if (!currentUser) return;
+    if (!currentUser) {
+      localStorage.removeItem("guestChatHistory");
+      return;
+    }
 
     // Delete chat history from clouds
     setIsHistoryLoading(true);
@@ -237,72 +273,43 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
     }
   };
 
-  if (!currentUser) {
-    return (
-      <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow-xl overflow-hidden flex flex-col justify-center items-center h-[550px] p-8 text-center space-y-6 relative">
-        <div className="absolute inset-4 border border-indigo-900/10 pointer-events-none rounded-xl"></div>
-        
-        <div className="bg-amber-950/10 p-4 rounded-full border border-amber-950/30 text-amber-400">
-          <Bot className="w-16 h-16 animate-bounce" />
-        </div>
-
-        <div className="space-y-2 max-w-md">
-          <h2 className="text-2xl font-serif font-bold text-amber-400">فَعِّل مَزايا الذّكاء الاصطِناعِي 🤖</h2>
-          <p className="text-slate-300 text-sm leading-relaxed font-sans">
-            من أجل حماية خصوصية دراستك والدردشة المستمرة مع "أستاذ التاريخ المساعد التفاعلي" المدعوم بـ Google Gemini، يُرجى تسجيل الدخول الآمن بحسابك على Google أولاً.
-          </p>
-        </div>
-
-        <button
-          onClick={onSignInWithGoogle}
-          className="bg-white hover:bg-slate-100 text-slate-900 font-sans font-bold text-sm py-3.5 px-8 rounded-xl flex items-center justify-center gap-3 transition active:scale-[0.98] cursor-pointer shadow-lg hover:shadow-amber-500/10"
-        >
-          {/* Google Logo SVG */}
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-            <path fill="#EA4335" d="M12 5.04c1.7 0 3.23.58 4.43 1.73l3.31-3.3C17.74 1.54 15.01 1 12 1 7.15 1 3.1 3.94 1.25 8.16l3.96 3.07C6.15 7.6 8.78 5.04 12 5.04z" />
-            <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.47h6.44c-.28 1.47-1.11 2.71-2.36 3.56l3.66 2.84c2.14-1.97 3.75-4.87 3.75-8.51z" />
-            <path fill="#FBBC05" d="M5.21 11.23c-.24-.72-.38-1.5-.38-2.3s.14-1.58.38-2.3L1.25 8.16C.45 9.77 0 11.58 0 13.5s.45 3.73 1.25 5.34l3.96-3.07c-.24-.72-.38-1.5-.38-2.3s.14-1.58.38-2.3z" />
-            <path fill="#34A853" d="M12 23c3.24 0 5.96-1.07 7.95-2.91l-3.66-2.84c-1.01.68-2.31 1.09-3.79 1.09-3.22 0-5.85-2.56-6.79-6.19l-3.96 3.07C3.1 20.06 7.15 23 12 23z" />
-          </svg>
-          <span>تسجيل الدخول الآمن بحساب Google</span>
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-white rounded-2xl border border-amber-100 shadow-xl overflow-hidden flex flex-col h-[550px] text-right">
+    <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow-xl overflow-hidden flex flex-col h-[550px] text-right">
       {/* Mini Chat Header */}
-      <div className="bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-4 flex items-center justify-between text-white shrink-0">
+      <div className="bg-gradient-to-r from-[#1c132b] to-[#121020] border-b border-indigo-950 px-6 py-4 flex items-center justify-between text-white shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="bg-amber-600/30 p-2 rounded-lg border border-amber-500/20">
-            <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
+          <div className="bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+            <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
           </div>
           <div className="text-right">
-            <h2 className="font-serif font-bold text-base md:text-lg">المعلِّم التاريخي الذكي 🤖</h2>
-            <p className="text-[11px] text-amber-200 font-sans">
-              طالِب كفء للصف السادس • السجل السحابي للمشترك: <span className="underline">{currentUser.email}</span>
+            <h2 className="font-serif font-bold text-base md:text-lg text-amber-400">المعلِّم التاريخي الذكي 🤖</h2>
+            <p className="text-[11px] text-slate-300 font-sans">
+              طالِب كفء للصف السادس • {currentUser ? (
+                <>السجل السحابي للمشترك: <span className="underline text-amber-300">{currentUser.email}</span></>
+              ) : (
+                <span className="text-amber-400 font-bold">زائِر ذكيّ 🌟 (محادثة محلية لعدم التسجيل)</span>
+              )}
             </p>
           </div>
         </div>
         <button
           onClick={handleResetChat}
-          title="مسح محادثتي السحابية"
+          title={currentUser ? "مسح محادثتي السحابية" : "مسح محادثتي المحلية"}
           disabled={isHistoryLoading || isLoading}
-          className="text-amber-200 hover:text-white hover:bg-amber-800/40 p-1.5 rounded-lg transition disabled:opacity-55"
+          className="text-slate-400 hover:text-amber-400 hover:bg-indigo-950/60 p-1.5 rounded-lg transition disabled:opacity-55 cursor-pointer"
         >
           <RefreshCw className="w-5 h-5" />
         </button>
       </div>
 
       {/* Suggested trigger words ribbon */}
-      <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 overflow-x-auto whitespace-nowrap scrollbar-none flex gap-2 shrink-0">
+      <div className="bg-[#16132b] border-b border-indigo-950/60 px-4 py-2 overflow-x-auto whitespace-nowrap scrollbar-none flex gap-2 shrink-0">
         {SUGGESTED_PROMPTS.map((prompt, idx) => (
           <button
             key={idx}
             onClick={() => handleSendMessage(prompt)}
             disabled={isLoading || isHistoryLoading}
-            className="bg-white hover:bg-amber-900 hover:text-white border border-amber-200/80 text-amber-900 rounded-full px-3.5 py-1 text-xs font-medium cursor-pointer transition whitespace-nowrap shadow-sm disabled:opacity-50"
+            className="bg-[#1f1a3a] hover:bg-amber-500 hover:text-slate-950 border border-indigo-950 text-slate-100 rounded-full px-3.5 py-1 text-xs font-medium cursor-pointer transition whitespace-nowrap shadow-sm disabled:opacity-50"
           >
             {prompt}
           </button>
@@ -310,11 +317,11 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
       </div>
 
       {/* Messages Body */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-amber-50/20">
+      <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-[#0f0d1c]">
         {isHistoryLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-center space-y-2">
-            <Loader2 className="w-8 h-8 text-amber-700 animate-spin" />
-            <p className="text-xs text-amber-800 font-medium font-sans">جاري مزامنة وتلافي المحادثات المسجلة من السحاب...</p>
+            <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+            <p className="text-xs text-slate-300 font-medium font-sans">جاري مزامنة وتلافي المحادثات المسجلة من السحاب...</p>
           </div>
         ) : (
           messages.map((msg, idx) => {
@@ -325,8 +332,8 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
                   {/* Bubble Icon */}
                   <div className={`w-8 h-8 rounded-full border flex items-center justify-center shrink-0 ${
                     isBot 
-                      ? "bg-amber-100 border-amber-200 text-amber-800" 
-                      : "bg-indigo-100 border-indigo-200 text-indigo-800"
+                      ? "bg-amber-950/40 border-amber-700/60 text-amber-400" 
+                      : "bg-[#1f1a3a] border-indigo-950 text-indigo-300"
                   }`}>
                     {isBot ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
                   </div>
@@ -334,8 +341,8 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
                   {/* Text Bubble */}
                   <div className={`p-4 rounded-2xl shadow-sm leading-relaxed text-sm ${
                     isBot 
-                      ? "bg-white text-gray-900 rounded-tl-none border border-amber-100/50" 
-                      : "bg-gradient-to-br from-indigo-800 to-indigo-900 text-white rounded-tr-none"
+                      ? "bg-[#18152c] text-slate-100 rounded-tl-none border border-indigo-950" 
+                      : "bg-gradient-to-br from-indigo-800 to-indigo-950 text-white rounded-tr-none border border-indigo-900/30"
                   }`}>
                     <p className="font-serif whitespace-pre-line text-right">{msg.text}</p>
                   </div>
@@ -347,19 +354,19 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
         {isLoading && (
           <div className="flex justify-start animate-pulse">
             <div className="flex gap-2.5 items-center">
-              <div className="w-8 h-8 rounded-full bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-amber-950/40 border border-amber-700/50 text-amber-400 flex items-center justify-center">
                 <Bot className="w-4 h-4" />
               </div>
-              <div className="bg-white p-3 rounded-2xl border border-amber-100/80 rounded-tl-none flex items-center gap-2">
-                <Loader2 className="w-4 h-4 text-amber-700 animate-spin" />
-                <span className="text-xs text-amber-800 font-medium">المعلم الذكي يطالع صفحات التاريخ بتمهل...</span>
+              <div className="bg-[#18152c] p-3 rounded-2xl border border-indigo-950/80 rounded-tl-none flex items-center gap-2">
+                <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+                <span className="text-xs text-slate-300 font-medium font-sans">المعلم الذكي يطالع صفحات التاريخ بتمهل...</span>
               </div>
             </div>
           </div>
         )}
         {errorFeedback && (
-          <div className="bg-red-50 text-red-800 border border-red-100 p-3 rounded-xl flex items-center gap-2 text-xs font-medium">
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+          <div className="bg-red-950/30 text-red-300 border border-red-900/40 p-3 rounded-xl flex items-center gap-2 text-xs font-medium">
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
             <span>{errorFeedback}</span>
           </div>
         )}
@@ -372,7 +379,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
           e.preventDefault();
           handleSendMessage(userInput);
         }}
-        className="p-4 border-t border-amber-100 bg-white flex gap-2 shrink-0 items-center"
+        className="p-4 border-t border-[#1b1736] bg-[#121020] flex gap-2 shrink-0 items-center"
       >
         <input
           type="text"
@@ -380,12 +387,12 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ currentUser, onSignInWithG
           onChange={(e) => setUserAnswerInput(e.target.value)}
           placeholder="اسأل المعلم الذكي: 'من شيد الأزهر؟' أو 'لماذا مات إسماعيل باشا حرقاً؟'..."
           disabled={isLoading || isHistoryLoading}
-          className="flex-grow bg-amber-50/50 hover:bg-amber-50 border border-amber-200/80 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-amber-900 focus:bg-white text-gray-900 disabled:opacity-50 text-right"
+          className="flex-grow bg-[#17142d] hover:bg-[#1d193a] border border-[#1d193a] rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-amber-500/60 focus:bg-[#1a1634] text-slate-100 placeholder-slate-500 disabled:opacity-50 text-right font-sans"
         />
         <button
           type="submit"
           disabled={!userInput.trim() || isLoading || isHistoryLoading}
-          className="bg-amber-800 hover:bg-amber-900 disabled:bg-amber-200 text-white p-3.5 rounded-xl transition shadow-md disabled:cursor-not-allowed shrink-0"
+          className="bg-amber-500 hover:bg-amber-400 disabled:bg-[#191530] text-slate-950 disabled:text-slate-600 p-3.5 rounded-xl transition shadow-md disabled:cursor-not-allowed shrink-0 cursor-pointer"
         >
           <Send className="w-4 h-4 transform rotate-180" />
         </button>

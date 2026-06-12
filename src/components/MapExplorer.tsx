@@ -127,20 +127,20 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({ score, setScore, onUnl
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-amber-100 shadow-xl p-6 overflow-hidden">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-6 border-b border-amber-50 gap-4">
+    <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow-xl p-6 overflow-hidden">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-6 border-b border-indigo-950/50 gap-4">
         <div>
-          <h2 className="text-2xl font-bold font-sans text-amber-900 flex items-center gap-2">
-            <Compass className="w-7 h-7 text-amber-600 animate-pulse" />
+          <h2 className="text-2xl font-bold font-sans text-amber-400 flex items-center gap-2">
+            <Compass className="w-7 h-7 text-amber-500 animate-pulse" />
             البوصلة التفاعلية: خريطة المنارات والمدن التاريخية
           </h2>
-          <p className="text-amber-700 text-sm mt-1">
+          <p className="text-slate-300 text-sm mt-1 font-sans">
             سافِر عبر القارات واستكشف عواصم الممالك الإسلامية والإفريقية والسودانية القديمة. انقُر على النّقاط الحمراء لحل الأسئلة الممتعة وكسب +15 نقطة معرفة!
           </p>
         </div>
-        <div className="bg-amber-50 px-4 py-2 rounded-xl flex items-center gap-2 border border-amber-200">
-          <Award className="w-5 h-5 text-amber-700" />
-          <span className="text-amber-900 font-bold text-sm">
+        <div className="bg-[#1a1738] px-4 py-2 rounded-xl flex items-center gap-2 border border-indigo-950">
+          <Award className="w-5 h-5 text-amber-400" />
+          <span className="text-slate-200 font-bold text-sm font-sans">
             المدن المستكشفة: {Object.keys(answeredCities).length} / {HISTORIC_CITIES.length}
           </span>
         </div>
@@ -148,42 +148,41 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({ score, setScore, onUnl
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         {/* Visual Simulated Stylized Map */}
-        <div className="lg:col-span-2 bg-[#FDFBF7] rounded-xl border border-amber-100 p-4 relative min-h-[350px] flex flex-col justify-between overflow-hidden shadow-inner">
+        <div className="lg:col-span-2 bg-[#0e0d1a] border border-indigo-950/50 rounded-xl p-4 relative min-h-[350px] flex flex-col justify-between overflow-hidden shadow-inner">
           <div className="absolute inset-0 opacity-10 pointer-events-none">
             {/* Grid Map Background */}
             <div className="w-full h-full bg-[radial-gradient(#d97706_1.5px,transparent_1.5px)] [background-size:24px_24px]"></div>
           </div>
 
           {/* Compass Rose Graphic */}
-          <div className="absolute top-4 right-4 w-16 h-16 pointer-events-none opacity-20 border-2 border-dashed border-amber-950 rounded-full flex items-center justify-center animate-[spin_60s_linear_infinite]">
-            <Compass className="w-10 h-10 text-amber-900" />
+          <div className="absolute top-4 right-4 w-16 h-16 pointer-events-none opacity-15 border-2 border-dashed border-indigo-950 rounded-full flex items-center justify-center animate-[spin_60s_linear_infinite]">
+            <Compass className="w-10 h-10 text-slate-400" />
           </div>
 
           <div className="relative w-full h-[280px] mt-2">
             {/* Legend / Continent Labels */}
-            <div className="absolute left-[8%] top-[12%] text-[10px] md:text-xs font-bold text-amber-800/40 tracking-wider">شمال إفريقيا والمغرب</div>
-            <div className="absolute left-[38%] top-[14%] text-[10px] md:text-xs font-bold text-amber-800/40 tracking-wider">مصر والشام</div>
-            <div className="absolute right-[12%] top-[8%] text-[10px] md:text-xs font-bold text-amber-800/40 tracking-wider">الخلافة والرافدين</div>
-            <div className="absolute left-[20%] top-[45%] text-[10px] md:text-xs font-bold text-amber-800/40 tracking-wider">غرب إفريقيا والسافانا</div>
-            <div className="absolute right-[25%] top-[55%] text-[10px] md:text-xs font-bold text-amber-800/40 tracking-wider">بلاد السودان والنيل</div>
-            <div className="absolute right-[8%] top-[85%] text-[10px] md:text-xs font-bold text-amber-800/40 tracking-wider">ساحل شرق إفريقيا</div>
+            <div className="absolute left-[8%] top-[12%] text-[10px] md:text-xs font-bold text-slate-400/60 tracking-wider">شمال إفريقيا والمغرب</div>
+            <div className="absolute left-[38%] top-[14%] text-[10px] md:text-xs font-bold text-slate-400/60 tracking-wider">مصر والشام</div>
+            <div className="absolute right-[12%] top-[8%] text-[10px] md:text-xs font-bold text-slate-400/60 tracking-wider">الخلافة والرافدين</div>
+            <div className="absolute left-[20%] top-[45%] text-[10px] md:text-xs font-bold text-slate-400/60 tracking-wider">غرب إفريقيا والسافانا</div>
+            <div className="absolute right-[25%] top-[55%] text-[10px] md:text-xs font-bold text-slate-400/60 tracking-wider">بلاد السودان والنيل</div>
+            <div className="absolute right-[8%] top-[85%] text-[10px] md:text-xs font-bold text-slate-400/60 tracking-wider">ساحل شرق إفريقيا</div>
 
             {/* Simulated River Nile & Oceans */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
               {/* Nile River winding */}
-              <path d="M 160,110 C 158,130 178,160 174,180 C 170,195 182,210 180,240" fill="none" stroke="#93C5FD" strokeWidth="4" strokeLinecap="round" opacity="0.6" />
+              <path d="M 160,110 C 158,130 178,160 174,180 C 170,195 182,210 180,240" fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" opacity="0.6" />
               {/* Nile delta in Cairo */}
-              <path d="M 160,110 L 150,95 M 160,110 L 170,95" fill="none" stroke="#93C5FD" strokeWidth="3" strokeLinecap="round" opacity="0.6" />
+              <path d="M 160,110 L 150,95 M 160,110 L 170,95" fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" opacity="0.6" />
               
               {/* Red Sea Outline */}
-              <path d="M 195,110 Q 185,150 205,190 T 215,240" fill="none" stroke="#DBEAFE" strokeWidth="3" strokeLinecap="round" opacity="0.4" />
+              <path d="M 195,110 Q 185,150 205,190 T 215,240" fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" opacity="0.4" />
               {/* Maritime shipping routes (dotted connection lines) */}
-              <path d="M 70,85 C 90,80 140,80 155,90 M 155,94 C 180,105 210,120 220,100 M 195,240 Q 200,210 230,225" fill="none" stroke="#F59E0B" strokeWidth="1" strokeDasharray="4 4" opacity="0.4" />
+              <path d="M 70,85 C 90,80 140,80 155,90 M 155,94 C 180,105 210,120 220,100 M 195,240 Q 200,210 230,225" fill="none" stroke="#f59e0b" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
             </svg>
 
             {/* Interactive City Nodes */}
             {HISTORIC_CITIES.map((city, idx) => {
-              // Convert percentages or static coords to responsive grids
               const leftPercent = `${city.x}%`;
               const topPercent = `${city.y}%`;
               const isSelected = selectedCity?.name === city.name;
@@ -205,20 +204,20 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({ score, setScore, onUnl
                     {/* Outer circle */}
                     <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
                       isSelected 
-                        ? "bg-amber-900 border-white scale-125 shadow-lg" 
+                        ? "bg-amber-500 border-yellow-200 scale-125 shadow-lg shadow-amber-500/25" 
                         : isSolved 
-                        ? "bg-emerald-600 border-emerald-100" 
-                        : "bg-red-600 border-red-100 hover:bg-red-500 hover:scale-110"
+                        ? "bg-emerald-600 border-emerald-400" 
+                        : "bg-red-600 border-red-300 hover:bg-red-500 hover:scale-110"
                     }`}>
                       {isSolved ? (
                         <Check className="w-4 h-4 text-white" />
                       ) : (
-                        <MapPin className={`w-4 h-4 ${isSelected ? "text-amber-200" : "text-white"}`} />
+                        <MapPin className={`w-4 h-4 ${isSelected ? "text-slate-950" : "text-white"}`} />
                       )}
                     </div>
 
                     {/* Styled Marker Tooltip */}
-                    <span className={`absolute bottom-9 left-1/2 -translate-x-1/2 bg-amber-950 text-white font-serif px-2.5 py-0.5 rounded text-[11px] shadow-md pointer-events-none transition-all whitespace-nowrap ${
+                    <span className={`absolute bottom-9 left-1/2 -translate-x-1/2 bg-slate-900 border border-indigo-950 text-amber-300 font-sans px-2.5 py-0.5 rounded text-[11px] shadow-md pointer-events-none transition-all whitespace-nowrap ${
                       isSelected 
                         ? "opacity-100 scale-100" 
                         : "opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100"
@@ -231,41 +230,41 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({ score, setScore, onUnl
             })}
           </div>
 
-          <div className="bg-amber-50/50 p-2 text-center rounded-lg border border-amber-950/5 mt-auto">
-            <span className="text-amber-800 text-[11px] font-sans flex items-center justify-center gap-1.5">
+          <div className="bg-[#161225] p-2 text-center rounded-lg border border-indigo-950/60 mt-auto">
+            <span className="text-slate-300 text-[11px] font-sans flex items-center justify-center gap-1.5">
               <span>● حمراء: بحاجة للاستكشاف والحل</span>
               <span>•</span>
-              <span className="text-emerald-700">● خضراء: تم الاستكشاف بامتياز (+15 نقطة)</span>
+              <span className="text-emerald-400">● خضراء: تم الاستكشاف بامتياز (+15 نقطة)</span>
             </span>
           </div>
         </div>
 
         {/* Informative City Details & Quiz Card */}
-        <div className="bg-[#FCFAF7] rounded-xl border border-amber-100 p-5 flex flex-col justify-start min-h-[300px]">
+        <div className="bg-[#15122b]/90 border border-indigo-950/80 rounded-xl p-5 flex flex-col justify-start min-h-[300px]">
           {selectedCity ? (
             <div className="space-y-4 animate-[fadeIn_0.3s_ease-out]">
-              <div className="pb-3 border-b border-amber-100">
-                <span className="bg-amber-100 text-amber-800 text-xs px-2.5 py-0.5 rounded-full font-bold">
+              <div className="pb-3 border-b border-indigo-950/50">
+                <span className="bg-amber-500/10 text-amber-300 text-xs px-2.5 py-0.5 rounded-full font-bold border border-amber-500/20 font-sans">
                   {selectedCity.country}
                 </span>
-                <h3 className="text-2xl font-bold font-serif text-amber-950 mt-1">
+                <h3 className="text-2xl font-bold font-serif text-amber-400 mt-1">
                   مدينة {selectedCity.name}
                 </h3>
               </div>
 
-              <p className="text-amber-900 text-sm leading-relaxed">
+              <p className="text-slate-200 text-sm leading-relaxed font-serif">
                 {selectedCity.description}
               </p>
 
               {/* Bonus Quiz Section */}
               {currentCityQuestion && (
-                <div className="bg-white rounded-xl border border-amber-200/80 p-4 mt-4 space-y-3">
-                  <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
-                    <HelpCircle className="w-4 h-4 text-amber-700" />
-                    <span>تحدي المعرفة الخاص بالمدينة:</span>
+                <div className="bg-[#181532]/90 rounded-xl border border-indigo-950 p-4 mt-4 space-y-3">
+                  <div className="flex items-center gap-1.5 text-slate-200 font-bold text-xs">
+                    <HelpCircle className="w-4 h-4 text-amber-400" />
+                    <span className="font-sans">تحدي المعرفة الخاص بالمدينة:</span>
                   </div>
                   
-                  <p className="text-amber-950 text-sm font-semibold font-serif leading-relaxed">
+                  <p className="text-amber-300 text-sm font-semibold font-serif leading-relaxed">
                     {currentCityQuestion.text}
                   </p>
 
@@ -274,14 +273,14 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({ score, setScore, onUnl
                       const isUserChoice = userAnswer === option;
                       const isCorrectAnswer = option === currentCityQuestion.correct;
                       
-                      let btnStyle = "bg-amber-50/40 hover:bg-amber-50 border-amber-100 text-amber-900";
+                      let btnStyle = "bg-[#131126] hover:bg-[#1c183a] border border-indigo-950/80 text-slate-100 hover:scale-[1.01]";
                       if (userAnswer) {
                         if (isCorrectAnswer) {
-                          btnStyle = "bg-emerald-100 border-emerald-400 text-emerald-950";
+                          btnStyle = "bg-emerald-950/80 border-emerald-500/40 text-emerald-300";
                         } else if (isUserChoice) {
-                          btnStyle = "bg-red-100 border-red-300 text-red-950";
+                          btnStyle = "bg-red-950/80 border-red-500/40 text-red-300";
                         } else {
-                          btnStyle = "bg-gray-50 border-gray-100 text-gray-400 opacity-60";
+                          btnStyle = "bg-[#131126]/30 border-indigo-950/30 text-slate-600 opacity-60";
                         }
                       }
 
@@ -290,11 +289,11 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({ score, setScore, onUnl
                           key={oIdx}
                           disabled={!!userAnswer}
                           onClick={() => handleAnswerSubmit(option)}
-                          className={`w-full text-right p-2.5 rounded-lg border text-xs font-medium transition-all flex items-center justify-between ${btnStyle}`}
+                          className={`w-full text-right p-2.5 rounded-lg border text-xs font-medium font-serif ease-out duration-150 transition-all flex items-center justify-between ${btnStyle}`}
                         >
                           <span>{option}</span>
-                          {userAnswer && isCorrectAnswer && <Check className="w-4 h-4 text-emerald-700" />}
-                          {userAnswer && isUserChoice && !isCorrectAnswer && <X className="w-4 h-4 text-red-700" />}
+                          {userAnswer && isCorrectAnswer && <Check className="w-4 h-4 text-emerald-400" />}
+                          {userAnswer && isUserChoice && !isCorrectAnswer && <X className="w-4 h-4 text-red-400" />}
                         </button>
                       );
                     })}
@@ -302,12 +301,12 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({ score, setScore, onUnl
 
                   {/* Feedback Message */}
                   {quizResult === "correct" && (
-                    <div className="bg-emerald-50 text-emerald-800 p-2.5 rounded-lg text-xs font-medium text-center animate-bounce">
+                    <div className="bg-emerald-950/60 text-emerald-300 border border-emerald-900/30 p-2.5 rounded-lg text-xs font-medium text-center animate-bounce font-sans">
                       🎉 مذهل! إجابة صحيحة. حصلت على 15+ نقاط معرفة!
                     </div>
                   )}
                   {quizResult === "wrong" && (
-                    <div className="bg-red-50 text-red-800 p-2.5 rounded-lg text-xs font-medium text-center">
+                    <div className="bg-red-950/60 text-red-300 border border-red-900/40 p-2.5 rounded-lg text-xs font-medium text-center font-sans">
                       ❌ أوه! حاول مجدداً مع تصفح معلومات المدينة جيداً.
                     </div>
                   )}
@@ -315,12 +314,12 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({ score, setScore, onUnl
               )}
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 my-auto text-amber-800">
-              <Compass className="w-14 h-14 text-amber-300 animate-[spin_10s_linear_infinite] mb-3" />
-              <h3 className="font-serif font-bold text-lg text-amber-950">
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 my-auto text-slate-400">
+              <Compass className="w-14 h-14 text-amber-500 animate-[spin_10s_linear_infinite] mb-3 opacity-80" />
+              <h3 className="font-serif font-bold text-lg text-amber-400">
                 بانتظار انطلاق المسافر
               </h3>
-              <p className="text-xs text-amber-700 mt-1 max-w-[200px]">
+              <p className="text-xs text-slate-300 mt-1 max-w-[200px] leading-relaxed font-sans">
                 انقر على أي مدينة تاريخية على الخريطة لعرض تفاصيلها النادرة وحل تحدياتها وكسب أوسمة الأبطال!
               </p>
             </div>
