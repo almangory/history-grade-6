@@ -1,0 +1,1409 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from "react";
+import { UNITS, QUESTIONS, BADGES_LIST } from "./data";
+import { QuestionType, Unit, Question } from "./types";
+import { playSound } from "./components/SoundEffects";
+import { SVGIllustration } from "./components/SVGIllustrations";
+import { MapExplorer } from "./components/MapExplorer";
+import { AIChatBot } from "./components/AIChatBot";
+import {
+  Compass,
+  BookOpen,
+  Globe,
+  Lightbulb,
+  Heart,
+  Award,
+  Volume2,
+  VolumeX,
+  Home,
+  ArrowRight,
+  HelpCircle,
+  Trophy,
+  Gamepad2,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Book,
+  FileText,
+  User,
+  Star,
+  MapPin,
+  Sparkles,
+  Bot,
+  Clock
+} from "lucide-react";
+
+export default function App() {
+  // Game & User Progression States
+  const [useSound, setUseSound] = useState(true);
+  const [userName, setUserName] = useState<string>(() => {
+    return localStorage.getItem("sub_historian_name") || "";
+  });
+  const [userAvatar, setUserAvatar] = useState<string>(() => {
+    return localStorage.getItem("sub_historian_avatar") || "explorer";
+  });
+  const [score, setScore] = useState<number>(() => {
+    const saved = localStorage.getItem("sub_historian_score");
+    return saved ? parseInt(saved, 10) : 100; // Start with 100 points
+  });
+  const [unlockedBadges, setUnlockedBadges] = useState<string[]>(() => {
+    const saved = localStorage.getItem("sub_historian_badges");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // App Navigation States
+  const [currentTab, setCurrentTab] = useState<"dashboard" | "unit" | "map" | "chat" | "quiz_hub" | "badges">("dashboard");
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
+  
+  // Lesson Inner Navigation States
+  const [lessonActiveSubTab, setLessonActiveSubTab] = useState<"lessons" | "timeline" | "flashcards">("lessons");
+  const [currentLessonIdx, setCurrentLessonIdx] = useState(0);
+  const [timelineIndex, setTimelineIndex] = useState(0);
+  const [flashcardIdx, setFlashcardIdx] = useState(0);
+  const [flashcardFlipped, setFlashcardFlipped] = useState(false);
+
+  // Play Mode States
+  const [quizMode, setQuizMode] = useState<"none" | "curriculum" | "speedrun" | "match">("none");
+  const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+  const [quizIdx, setQuizIdx] = useState(0);
+  const [quizCorrectAnswers, setQuizAnswersCount] = useState(0);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [answeredQuestionInGroup, setAnsweredQuestionInGroup] = useState<Record<string, { userOption: string, correct: boolean }>>({});
+  const [speedrunTimer, setSpeedrunTimer] = useState(15);
+  const [activeSpeedrunStatement, setActiveSpeedrunStatement] = useState<Question | null>(null);
+  const [speedrunIntervalId, setSpeedrunIntervalId] = useState<any>(null);
+
+  // Drag & Match Mini-Game States
+  const [matchLeft, setMatchLeft] = useState<{ id: string, text: string }[]>([]);
+  const [matchRight, setMatchRight] = useState<{ id: string, text: string }[]>([]);
+  const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
+  const [matchedPairs, setMatchedPairs] = useState<Record<string, string>>({}); // Mapping representing LeftID -> RightID
+  const [wrongMatchLeft, setWrongMatchLeft] = useState<string | null>(null);
+  const [wrongMatchRight, setWrongMatchRight] = useState<string | null>(null);
+
+  // Initial user setup state (Temporary draft holding name)
+  const [inputName, setInputName] = useState("");
+  const [selectedAvatarDraft, setSelectedAvatarDraft] = useState("explorer");
+
+  // Save progress automatically
+  useEffect(() => {
+    localStorage.setItem("sub_historian_name", userName);
+    localStorage.setItem("sub_historian_avatar", userAvatar);
+    localStorage.setItem("sub_historian_score", score.toString());
+    localStorage.setItem("sub_historian_badges", JSON.stringify(unlockedBadges));
+  }, [userName, userAvatar, score, unlockedBadges]);
+
+  // Achievement unlock triggers
+  const unlockBadge = (badgeId: string) => {
+    if (!unlockedBadges.includes(badgeId)) {
+      setUnlockedBadges(prev => [...prev, badgeId]);
+      setScore(prev => prev + 50); // Big point bump!
+      if (useSound) playSound("levelup");
+    }
+  };
+
+  // Check achievements automatically based on score milestones
+  useEffect(() => {
+    if (score >= 200) unlockBadge("perfect_score"); // Marks an early high score milestone
+  }, [score]);
+
+  // Speedrun timer effect
+  useEffect(() => {
+    if (quizMode === "speedrun" && speedrunTimer > 0) {
+      const timer = setTimeout(() => {
+        setSpeedrunTimer(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (quizMode === "speedrun" && speedrunTimer === 0) {
+      handleSpeedrunAnswer(null); // Time out
+    }
+  }, [speedrunTimer, quizMode]);
+
+  // Sound play wrapper helper
+  const handlePlaySound = (type: "click" | "success" | "fail" | "levelup") => {
+    if (useSound) playSound(type);
+  };
+
+  // Avatar Icons helper
+  const renderAvatar = (avatarType: string, sz: string = "w-12 h-12") => {
+    const list: Record<string, string> = {
+      explorer: "🤠",
+      scholar: "👳",
+      knight: "🛡️",
+      teacher: "👩‍🏫"
+    };
+    return (
+      <div className={`${sz} bg-amber-100 rounded-full flex items-center justify-center text-2xl border border-amber-300 shadow-sm shrink-0`}>
+        {list[avatarType] || "🤠"}
+      </div>
+    );
+  };
+
+  // Unit Icon Map
+  const renderUnitIcon = (iconName: string) => {
+    switch (iconName) {
+      case "Compass": return <Compass className="w-8 h-8" />;
+      case "BookOpen": return <BookOpen className="w-8 h-8" />;
+      case "Globe": return <Globe className="w-8 h-8" />;
+      case "Lightbulb": return <Lightbulb className="w-8 h-8" />;
+      case "Heart": return <Heart className="w-8 h-8" />;
+      default: return <BookOpen className="w-8 h-8" />;
+    }
+  };
+
+  // Setup / Welcome parsed
+  const handleStartGame = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputName.trim()) return;
+    setUserName(inputName.trim());
+    setUserAvatar(selectedAvatarDraft);
+    setScore(100); // Starter points
+    setUnlockedBadges([]);
+    handlePlaySound("levelup");
+  };
+
+  const handleUnitSelect = (unit: Unit) => {
+    handlePlaySound("click");
+    setSelectedUnitId(unit.id);
+    setCurrentLessonIdx(0);
+    setTimelineIndex(0);
+    setFlashcardIdx(0);
+    setFlashcardFlipped(false);
+    setLessonActiveSubTab("lessons");
+    setQuizMode("none");
+    setCurrentTab("unit");
+  };
+
+  // Quiz Mode Initiator
+  const startComprehensiveQuiz = (unitId: number) => {
+    handlePlaySound("click");
+    // Filter questions relevant to this unit
+    const filtered = QUESTIONS.filter(q => q.unitId === unitId);
+    setQuizQuestions(filtered);
+    setQuizIdx(0);
+    setQuizAnswersCount(0);
+    setSelectedOption(null);
+    setAnsweredQuestionInGroup({});
+    setQuizMode("curriculum");
+  };
+
+  const startSpeedrunQuiz = (unitId: number) => {
+    handlePlaySound("click");
+    // Speedrun is True/False questions only
+    const filtered = QUESTIONS.filter(q => q.unitId === unitId && q.type === QuestionType.TRUE_FALSE);
+    if (filtered.length === 0) return;
+    setQuizQuestions(filtered);
+    setQuizIdx(0);
+    setQuizAnswersCount(0);
+    setSpeedrunTimer(15);
+    setActiveSpeedrunStatement(filtered[0]);
+    setQuizMode("speedrun");
+  };
+
+  const startMatchGame = (unitId: number) => {
+    handlePlaySound("click");
+    const filtered = QUESTIONS.filter(q => q.unitId === unitId && q.type === QuestionType.MATCH);
+    if (filtered.length === 0) return;
+    
+    // Setup Left & Right lists of selected match set
+    const sourceMatch = filtered[0]; // Take first match set
+    if (!sourceMatch.matchPairs) return;
+    
+    const leftSide = sourceMatch.matchPairs.map((p, idx) => ({ id: `L_${idx}`, text: p.left }));
+    const rightSide = sourceMatch.matchPairs.map((p, idx) => ({ id: `R_${idx}`, text: p.right }));
+    
+    // Shuffle lists
+    const shuffledLeft = [...leftSide].sort(() => Math.random() - 0.5);
+    const shuffledRight = [...rightSide].sort(() => Math.random() - 0.5);
+
+    setMatchLeft(shuffledLeft);
+    setMatchRight(shuffledRight);
+    setSelectedLeft(null);
+    setMatchedPairs({});
+    setQuizQuestions(filtered);
+    setQuizMode("match");
+  };
+
+  // Handle MCQ / True-False choices
+  const handleAnswerSelection = (option: string) => {
+    if (selectedOption || quizMode !== "curriculum") return;
+    
+    const currentQ = quizQuestions[quizIdx];
+    setSelectedOption(option);
+    
+    const isCorrect = option === currentQ.correctAnswer;
+    setAnsweredQuestionInGroup(prev => ({
+      ...prev,
+      [currentQ.id]: { userOption: option, correct: isCorrect }
+    }));
+
+    if (isCorrect) {
+      handlePlaySound("success");
+      setQuizAnswersCount(prev => prev + 1);
+      setScore(prev => prev + 10);
+    } else {
+      handlePlaySound("fail");
+    }
+  };
+
+  const handleNextQuiz = () => {
+    handlePlaySound("click");
+    setSelectedOption(null);
+    if (quizIdx + 1 < quizQuestions.length) {
+      setQuizIdx(prev => prev + 1);
+    } else {
+      // Quiz complete! Assess score
+      const scorePercentage = (quizCorrectAnswers / quizQuestions.length) * 100;
+      if (scorePercentage >= 80) {
+        // Unlock badge related to unit
+        const matchingUnit = UNITS.find(u => u.id === selectedUnitId);
+        if (matchingUnit) {
+          unlockBadge(`u${matchingUnit.id}`);
+        }
+      }
+      setSelectedOption(null);
+    }
+  };
+
+  // Handle Speedrun Answer (True/False)
+  const handleSpeedrunAnswer = (answer: string | null) => {
+    const currentQ = quizQuestions[quizIdx];
+    const isCorrect = answer === currentQ.correctAnswer;
+
+    if (isCorrect) {
+      handlePlaySound("success");
+      setQuizAnswersCount(prev => prev + 1);
+      setScore(prev => prev + 15); // Harder challenge, more points
+    } else {
+      handlePlaySound("fail");
+    }
+
+    if (quizIdx + 1 < quizQuestions.length) {
+      setQuizIdx(prev => prev + 1);
+      setSpeedrunTimer(15);
+      setActiveSpeedrunStatement(quizQuestions[quizIdx + 1]);
+    } else {
+      // End speedrun
+      if (quizCorrectAnswers + 1 >= quizQuestions.length) {
+        unlockBadge(`u${selectedUnitId}`);
+      }
+      setQuizIdx(quizQuestions.length); // trigger end card
+    }
+  };
+
+  // Handle Matching tap
+  const handleLeftTap = (leftId: string) => {
+    if (matchedPairs[leftId]) return; // Already matched
+    handlePlaySound("click");
+    setSelectedLeft(leftId);
+    setWrongMatchLeft(null);
+    setWrongMatchRight(null);
+  };
+
+  const handleRightTap = (rightId: string) => {
+    if (!selectedLeft) return; // No left selected
+    
+    // Check if correct match
+    // Source index from LeftID & RightID: "L_0", "R_0", left with index equal to right
+    const leftIndex = selectedLeft.split("_")[1];
+    const rightIndex = rightId.split("_")[1];
+    
+    if (leftIndex === rightIndex) {
+      // Correct!
+      handlePlaySound("success");
+      setMatchedPairs(prev => ({ ...prev, [selectedLeft]: rightId }));
+      setScore(prev => prev + 20); // matching awards higher points
+      setSelectedLeft(null);
+
+      // Check if all matched
+      const totalPairs = quizQuestions[0].matchPairs?.length || 0;
+      if (Object.keys(matchedPairs).length + 1 === totalPairs) {
+        unlockBadge(`u${selectedUnitId}`);
+      }
+    } else {
+      // Wrong match
+      handlePlaySound("fail");
+      setWrongMatchLeft(selectedLeft);
+      setWrongMatchRight(rightId);
+      setTimeout(() => {
+        setWrongMatchLeft(null);
+        setWrongMatchRight(null);
+      }, 800);
+      setSelectedLeft(null);
+    }
+  };
+
+  // Logged-out Welcome Parchment Style Form
+  if (!userName) {
+    return (
+      <div className="min-h-screen bg-[#09080f] flex items-center justify-center p-4 relative overflow-hidden font-serif">
+        {/* Animated Background Ornaments */}
+        <div className="absolute top-10 left-10 w-48 h-48 bg-indigo-900/30 rounded-full filter blur-3xl opacity-50 animate-pulse"></div>
+        <div className="absolute bottom-10 right-10 w-64 h-64 bg-amber-900/10 rounded-full filter blur-2xl opacity-40 animate-pulse"></div>
+
+        <div className="bg-[#121020] border border-slate-800/50 max-w-xl w-full rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.6)] p-8 md:p-12 relative">
+          {/* Internal Vintage Border */}
+          <div className="absolute inset-3 border border-slate-800/30 rounded-2xl pointer-events-none"></div>
+
+          <div className="text-center space-y-6 relative">
+            {/* Header Stamp */}
+            <div className="mx-auto w-16 h-16 bg-[#1b192e] text-amber-400 rounded-full flex items-center justify-center shadow-lg border border-slate-700/50">
+              <Compass className="w-9 h-9 animate-[spin_120s_linear_infinite]" />
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-3xl md:text-4xl font-extrabold text-amber-400 font-serif leading-tight">
+                المُؤرِّخ الصَّغير التفاعلي
+              </h1>
+              <p className="text-slate-300 text-sm md:text-base font-sans">
+                باصِرة رقمية ذكية لكتاب التاريخ المعتمد للصف السادس الابتدائي
+              </p>
+            </div>
+
+            <form onSubmit={handleStartGame} className="space-y-6 pt-4">
+              <div className="space-y-2 text-right">
+                <label className="block text-sm font-bold text-slate-200 pr-1">
+                  مرحباً بك يا بطل! ما هو اسمك الكريم؟
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={inputName}
+                  onChange={(e) => setInputName(e.target.value)}
+                  placeholder="أدخل اسمك الكريم هنا لتبدأ المغامرة..."
+                  className="w-full bg-[#18162b] hover:bg-[#1a1833] border-2 border-indigo-950 rounded-xl px-4 py-3.5 text-center text-slate-100 text-base placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:bg-[#1a1833] transition font-sans"
+                />
+              </div>
+
+              {/* Avatar Selector */}
+              <div className="space-y-3">
+                <span className="block text-sm font-bold text-slate-200 text-right pr-1">
+                  اختر رمز شخصية بطل التاريخ الخاص بك:
+                </span>
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    { id: "explorer", label: "المستكشف", emoji: "🤠" },
+                    { id: "scholar", label: "المؤرخ", emoji: "👳" },
+                    { id: "knight", label: "الفارس", emoji: "🛡️" },
+                    { id: "teacher", label: "الرسام", emoji: "👩‍🏫" }
+                  ].map((av) => (
+                    <button
+                      key={av.id}
+                      type="button"
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setSelectedAvatarDraft(av.id);
+                      }}
+                      className={`p-3.5 rounded-xl border-2 flex flex-col items-center gap-1.5 transition ${
+                        selectedAvatarDraft === av.id
+                          ? "bg-amber-800/80 text-white border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.25)] scale-105"
+                          : "bg-[#18152c]/50 border-indigo-950 hover:bg-[#1f1b3d] text-slate-300"
+                      }`}
+                    >
+                      <span className="text-3xl">{av.emoji}</span>
+                      <span className="text-[11px] font-sans font-bold">{av.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-amber-600 to-amber-750 hover:from-amber-500 hover:to-amber-650 text-white font-serif font-bold text-lg py-4 rounded-xl shadow-lg border border-transparent hover:scale-[1.01] active:scale-[0.99] transition duration-200 cursor-pointer"
+              >
+                انطلاق في رحلة التاريخ الممتعة 🚀
+              </button>
+            </form>
+
+            <p className="text-[11px] text-slate-400 font-sans pt-2 leading-relaxed">
+              استكشف بوابات التاريخ الإسلامي وعصر السودان الذهبي، أحدث التغييرات بالألغاز والألعاب مع نقاط المعرفة!
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Active student logged in
+  const selectedUnit = selectedUnitId ? UNITS.find(u => u.id === selectedUnitId) : null;
+
+  return (
+    <div className="min-h-screen bg-[#09080f] text-slate-150 font-sans flex flex-col">
+      {/* Visual top bar */}
+      <div className="h-1 bg-gradient-to-r from-amber-500 via-indigo-600 to-amber-700 shrink-0"></div>
+
+      {/* Main Top Header Navigation */}
+      <header className="bg-[#121020] border-b border-indigo-950/60 px-4 md:px-8 py-4 sticky top-0 z-40 shadow-md shrink-0">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("dashboard");
+                setSelectedUnitId(null);
+              }}
+              className="bg-[#1b1930] hover:bg-[#252244] border border-indigo-900/50 text-amber-400 p-2.5 rounded-xl shadow-md hover:scale-105 transition cursor-pointer"
+            >
+              <Compass className="w-6 h-6 animate-[spin_40s_linear_infinite]" />
+            </button>
+            <div>
+              <h1 className="text-xl md:text-2xl font-serif font-bold text-amber-400 flex items-center gap-1.5">
+                <span>المُؤرِّخ الصَّغير 🏛️</span>
+                <span className="text-xs md:text-sm bg-[#1e1422] text-amber-400 border border-amber-950 px-2.5 py-0.5 rounded-full font-sans font-bold">الصف السادس</span>
+              </h1>
+              <p className="text-[11px] text-slate-400 font-medium">سافر في التاريخ وعش غمار المغامرة الذكية</p>
+            </div>
+          </div>
+
+          {/* User Score Ribbon */}
+          <div className="flex items-center gap-3 select-none flex-wrap justify-center font-sans">
+            {/* Sound Toggle */}
+            <button
+              onClick={() => setUseSound(!useSound)}
+              className={`p-2.5 rounded-xl border transition cursor-pointer ${
+                useSound ? "bg-[#1d121c] text-amber-400 border-amber-900/30" : "bg-[#18152c] text-slate-500 border-indigo-950"
+              }`}
+            >
+              {useSound ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            </button>
+
+            {/* Achievements Card */}
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("badges");
+              }}
+              className="bg-[#19152b] hover:bg-[#231d3d] border border-indigo-950/60 rounded-xl px-3 py-2 flex items-center gap-1.5 transition text-yellow-400 cursor-pointer"
+            >
+              <Trophy className="w-5 h-5 text-yellow-500 shrink-0" />
+              <div className="text-right">
+                <div className="text-[10px] font-bold text-yellow-600 leading-none">الأوسمة</div>
+                <div className="text-xs font-bold font-serif text-slate-100">{unlockedBadges.length} / {BADGES_LIST.length}</div>
+              </div>
+            </button>
+
+            {/* Knowledge points total badge */}
+            <div className="bg-[#1e131d] text-white border border-amber-950/50 rounded-xl px-4 py-2 flex items-center gap-2 shadow-inner">
+              <Star className="w-5 h-5 text-amber-400 animate-pulse shrink-0 fill-amber-400" />
+              <div className="text-right">
+                <div className="text-[10px] text-amber-500 leading-none">نقاط المعرفة</div>
+                <div className="text-sm font-bold font-serif text-slate-50">{score}</div>
+              </div>
+            </div>
+
+            {/* Avatar display */}
+            <div className="flex items-center gap-2 border-r pr-3 border-indigo-950/60 mr-1">
+              {renderAvatar(userAvatar, "w-10 h-10")}
+              <div className="text-right hidden sm:block">
+                <div className="text-[11px] font-bold text-slate-200">{userName}</div>
+                <div className="text-[10px] text-slate-400">مستوى {Math.floor(score / 300) + 1}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Container Wrapper */}
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+        {/* TAB 1: DASHBOARD / UNITS GRID */}
+        {currentTab === "dashboard" && (
+          <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
+            {/* Quick Hero Banner */}
+            <div className="relative bg-gradient-to-br from-[#1b1236] to-[#2e1d13] rounded-3xl p-6 md:p-10 text-white shadow-xl overflow-hidden border border-indigo-900/50">
+              <div className="absolute inset-0 opacity-5 pointer-events-none bg-[radial-gradient(#FFF_1px,transparent_1px)] [background-size:16px_16px]"></div>
+              
+              <div className="relative max-w-2xl space-y-3 text-right">
+                <div className="inline-flex items-center gap-1.5 bg-amber-400/10 border border-amber-500/20 px-3 py-1 rounded-full text-xs font-bold text-amber-300">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>بداية عام دراسي حافل ومتألق!</span>
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold font-serif leading-tight text-amber-400">
+                  أهلاً بك معنا في مغامرة التاريخ يا بطل، {userName}! 🎯
+                </h2>
+                <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-sans">
+                  هذا الموقع التفاعلي يختصر لك كتاب التاريخ للصف السادس الابتدائي بطريقة شيّقة وممتعة بالصور، والخطوط الزمنية التفاعلية، والألعاب وحل الخرائط للتقدم في لوحة الشرف! يمكنك أيضاً الدردشة الفورية مع "المعلم التاريخي الذكي" للإجابة عن أسئلتك.
+                </p>
+
+                <div className="flex flex-wrap gap-2.5 pt-2">
+                  <button
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setCurrentTab("map");
+                    }}
+                    className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 border border-transparent rounded-xl px-4 py-2 text-xs font-extrabold transition shadow flex items-center gap-1.5 cursor-pointer h-10 text-white"
+                  >
+                    <Compass className="w-4 h-4" />
+                    <span>تصفح خريطة المدن</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setCurrentTab("chat");
+                    }}
+                    className="bg-white/10 hover:bg-white/20 text-slate-100 border border-slate-700/40 rounded-xl px-4 py-2 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer h-10"
+                  >
+                    <Bot className="w-4 h-4 text-amber-400" />
+                    <span>اسأل المعلم الذكي</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Absolute illustration representing historical scroll */}
+              <div className="absolute left-6 bottom-4 lg:bottom-2 w-32 h-32 md:w-44 md:h-44 opacity-15 lg:opacity-30 hidden md:block text-amber-300 pointer-events-none transform -rotate-12 translate-y-6">
+                <Book className="w-full h-full" />
+              </div>
+            </div>
+
+            {/* Lessons Curriculum Units Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-indigo-950/60 pb-2">
+                <h3 className="text-xl md:text-2xl font-serif font-bold text-slate-100 flex items-center gap-2">
+                  <BookOpen className="w-6 h-6 text-amber-400" />
+                  منهج التاريخ التفاعلي (5 وحدات كاملة)
+                </h3>
+                <span className="text-xs text-slate-400 font-medium font-sans">اختر وحدة لتقرأ دروسها وتخوض اختباراتها وتجني الأوسمة</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {UNITS.map((unit) => {
+                  const unitBadgeUnlocked = unlockedBadges.includes(`u${unit.id}`);
+
+                  return (
+                    <div
+                      key={unit.id}
+                      onClick={() => handleUnitSelect(unit)}
+                      className="group bg-[#121020] rounded-2xl border border-indigo-950/80 shadow-[0_4px_15px_rgba(0,0,0,0.3)] hover:shadow-[0_8px_30px_rgba(245,158,11,0.12)] hover:scale-[1.01] hover:border-amber-500/40 transition-all duration-300 cursor-pointer overflow-hidden flex flex-col h-full relative"
+                    >
+                      {/* Accent color bar */}
+                      <div className={`h-1.5 w-full bg-${unit.themeColor}-600/70`}></div>
+                      
+                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-3">
+                          {/* Unit Title & Icon */}
+                          <div className="flex items-center justify-between">
+                            <div className="p-3 rounded-xl bg-[#17142d] text-amber-400 border border-slate-800/60 group-hover:scale-105 transition">
+                              {renderUnitIcon(unit.icon)}
+                            </div>
+                            {unitBadgeUnlocked ? (
+                              <span className="bg-emerald-950/60 text-emerald-400 border border-emerald-900/40 text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 shadow-sm font-sans">
+                                <Award className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
+                                <span>تم فتح الوسام</span>
+                              </span>
+                            ) : (
+                              <span className="bg-slate-900/60 text-slate-400 border border-slate-800/40 text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 font-sans">
+                                <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+                                <span>الوسام مغلق</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="space-y-1 text-right">
+                            <span className="text-[11px] text-amber-500/80 font-bold uppercase tracking-wider font-sans">الوحدة {unit.id}</span>
+                            <h4 className="text-xl font-bold font-serif text-slate-100 leading-snug group-hover:text-amber-400 transition">
+                              {unit.title}
+                            </h4>
+                            <p className="text-xs text-slate-400 leading-none">
+                              {unit.subtitle}
+                            </p>
+                          </div>
+
+                          <p className="text-xs text-slate-300 font-serif leading-relaxed line-clamp-2">
+                            {unit.description}
+                          </p>
+                        </div>
+
+                        {/* Extra indicators */}
+                        <div className="pt-3 border-t border-indigo-950/40 flex items-center justify-between text-xs font-medium text-slate-300">
+                          <span className="font-sans text-slate-400">الدروس: {unit.lessons.length}</span>
+                          <span className="font-sans flex items-center gap-1 text-slate-200 font-bold group-hover:translate-x-[-4px] transition duration-200">
+                            <span>تصحف تفاعلياً</span>
+                            <ArrowRight className="w-3.5 h-3.5 transform rotate-180" />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Quick Play options / Mini games */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Box 1: Interactive Map preview card */}
+              <div className="bg-[#14122d]/60 border border-indigo-950/80 rounded-2xl p-6 flex flex-col md:flex-row gap-6 items-center justify-between">
+                <div className="space-y-2 text-right">
+                  <h4 className="text-lg font-bold font-serif text-amber-400 flex items-center gap-1.5 justify-end">
+                    <span>البوصلة التفاعلية: خريطة الممالك والمدن</span>
+                    <Compass className="w-5 h-5 text-amber-400" />
+                  </h4>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    هل ترغب في السفر عبر الزمان إلى سنار عاصمة الفونج، أو بغداد الدائرية، أو تيمبكتو عاصمة العلم، أو صقلية الأغالبة؟ انقر وحل اختبارات المدن لتجني نقاطاً إضافية!
+                  </p>
+                  <button
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setCurrentTab("map");
+                    }}
+                    className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow mt-1 inline-flex items-center gap-1 text-right cursor-pointer border-transparent"
+                  >
+                    <span>افتح البوصلة التاريخية والخرائط</span>
+                  </button>
+                </div>
+                <div className="w-24 h-24 stroke-amber-550 text-amber-400 shrink-0">
+                  <Compass className="w-full h-full opacity-40 animate-[spin_180s_linear_infinite]" />
+                </div>
+              </div>
+
+              {/* Box 2: Smart Chatbot helper */}
+              <div className="bg-[#1a1226]/60 border border-indigo-950/80 rounded-2xl p-6 flex flex-col md:flex-row gap-6 items-center justify-between">
+                <div className="space-y-2 text-right">
+                  <h4 className="text-lg font-bold font-serif text-amber-400 flex items-center gap-1.5 justify-end">
+                    <span>احصل على إجابات ذكية فورية!</span>
+                    <Bot className="w-5 h-5 text-amber-400" strokeWidth="2.5" />
+                  </h4>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    سواء كنت مندهشاً من حرق إسماعيل باشا في شندي، أو متشوّقاً لقصة بناء بغداد الدائرية، أو تريد معرفة فتون الفاطميين وقنوات النهضة، فإن المعلم الذكي هنا للإجابة عليك فوراً وتوضيح المنهج بشكل بسيط!
+                  </p>
+                  <button
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setCurrentTab("chat");
+                    }}
+                    className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow mt-1 inline-flex items-center gap-1 text-right cursor-pointer border-transparent"
+                  >
+                    <span>دردش مع أستاذ التاريخ الذكي</span>
+                  </button>
+                </div>
+                <div className="w-24 h-24 stroke-amber-550 text-amber-400 shrink-0 flex items-center justify-center">
+                  <Bot className="w-20 h-20 opacity-40 text-amber-400 animate-pulse" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: MAP EXPLORER */}
+        {currentTab === "map" && (
+          <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("dashboard");
+              }}
+              className="bg-[#1b1930] hover:bg-[#252244] text-slate-100 text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 border border-indigo-900/40 cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4 transform rotate-180" />
+              <span>العودة للرئيسية</span>
+            </button>
+            <MapExplorer score={score} setScore={setScore} onUnlockBadge={unlockBadge} />
+          </div>
+        )}
+
+        {/* TAB 3: SMART CHATBOT */}
+        {currentTab === "chat" && (
+          <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("dashboard");
+              }}
+              className="bg-[#1b1930] hover:bg-[#252244] text-slate-100 text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 border border-indigo-900/40 cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4 transform rotate-180" />
+              <span>العودة للرئيسية</span>
+            </button>
+            <AIChatBot />
+          </div>
+        )}
+
+        {/* TAB 4: BADGES CABINET */}
+        {currentTab === "badges" && (
+          <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
+            <div className="flex items-center justify-between border-b border-indigo-950/60 pb-4">
+              <h2 className="text-2xl font-bold font-serif text-slate-100 flex items-center gap-2">
+                <Trophy className="w-7 h-7 text-amber-400 animate-pulse" />
+                لوحة الشرف والأوسمة الذهبية
+              </h2>
+              <button
+                onClick={() => {
+                  handlePlaySound("click");
+                  setCurrentTab("dashboard");
+                }}
+                className="bg-[#1b1930] hover:bg-[#252244] border border-indigo-900/40 text-slate-100 text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+              >
+                العودة للرئيسية
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans">
+              {BADGES_LIST.map((badge) => {
+                const isUnlocked = unlockedBadges.includes(badge.id);
+                return (
+                  <div
+                    key={badge.id}
+                    className={`rounded-2xl border p-5 flex items-center gap-4 transition-all ${
+                      isUnlocked
+                        ? "bg-[#1f162e]/75 border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)] animate-[pulse_5s_infinite]"
+                        : "bg-[#121020]/40 border-indigo-950/40 text-slate-500 opacity-60"
+                    }`}
+                  >
+                    {/* Badge Icon */}
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center shrink-0 shadow border ${
+                      isUnlocked
+                        ? "bg-gradient-to-tr from-yellow-400 to-amber-600 border-yellow-300 text-white animate-spin-once"
+                        : "bg-slate-900 border-slate-800 text-slate-600"
+                    }`}>
+                      <Award className="w-9 h-9 fill-current" />
+                    </div>
+
+                    <div className="space-y-1 text-right flex-1">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold font-serif text-slate-100 text-base">{badge.title}</h4>
+                        {isUnlocked ? (
+                          <span className="bg-emerald-950 text-emerald-400 text-[9px] px-1.5 py-0.5 rounded font-bold border border-emerald-900/40">تم الفتح</span>
+                        ) : (
+                          <span className="bg-slate-900 text-slate-400 text-[9px] px-1.5 py-0.5 rounded font-bold border border-slate-800/40">الفتح: {badge.condition}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-300 font-sans leading-relaxed">{badge.description}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: LESSON READER & QUIZ TRAY */}
+        {currentTab === "unit" && selectedUnit && (
+          <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
+            {/* Unit Cover Header */}
+            <div className="bg-gradient-to-br from-[#121020] to-[#1a1122] rounded-3xl p-6 border border-indigo-950 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+              <div className="absolute inset-5 border border-slate-800/20 rounded-2xl pointer-events-none"></div>
+
+              <div className="space-y-3 relative text-right flex-1 z-10">
+                <span className="bg-[#1e121e] text-amber-400 border border-amber-900/40 text-xs px-2.5 py-0.5 rounded-full font-bold">الوحدة {selectedUnit.id}</span>
+                <h2 className="text-2xl md:text-3xl font-bold font-serif text-amber-400">{selectedUnit.title}</h2>
+                <p className="text-xs md:text-sm text-slate-350 leading-relaxed font-sans max-w-2xl">{selectedUnit.description}</p>
+                
+                {/* Visual subtab navigator */}
+                <div className="flex flex-wrap gap-2 pt-2 select-none">
+                  <button
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setLessonActiveSubTab("lessons");
+                      setQuizMode("none");
+                    }}
+                    className={`px-4 py-2.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      lessonActiveSubTab === "lessons" && quizMode === "none"
+                        ? "bg-amber-800/90 text-white border-amber-500/50 shadow-md"
+                        : "bg-[#18152c] hover:bg-[#201c3e] text-slate-300 border-indigo-950/60"
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>مطالعة الدروس</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setLessonActiveSubTab("timeline");
+                      setQuizMode("none");
+                    }}
+                    className={`px-4 py-2.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      lessonActiveSubTab === "timeline" && quizMode === "none"
+                        ? "bg-amber-800/90 text-white border-amber-500/50 shadow-md"
+                        : "bg-[#18152c] hover:bg-[#201c3e] text-slate-300 border-indigo-950/60"
+                    }`}
+                  >
+                    <Star className="w-4 h-4" />
+                    <span>الخط الزمني</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setLessonActiveSubTab("flashcards");
+                      setQuizMode("none");
+                    }}
+                    className={`px-4 py-2.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      lessonActiveSubTab === "flashcards" && quizMode === "none"
+                        ? "bg-amber-800/90 text-white border-amber-500/50 shadow-md"
+                        : "bg-[#18152c] hover:bg-[#201c3e] text-slate-300 border-indigo-950/60"
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>بطاقات المراجعة</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quiz and Challenges Buttons */}
+              <div className="bg-[#121020]/90 rounded-2xl border border-indigo-950/80 p-5 shrink-0 w-full md:w-64 flex flex-col gap-2.5 shadow-sm">
+                <span className="text-slate-100 font-bold block text-sm border-b border-indigo-950 pb-2 text-center">🏆 مركز التحديات والاختبارات</span>
+                <button
+                  onClick={() => startComprehensiveQuiz(selectedUnit.id)}
+                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm border-none"
+                >
+                  <Gamepad2 className="w-4 h-4" />
+                  <span>الاختبار النهائي للوحدة</span>
+                </button>
+                {QUESTIONS.some(q => q.unitId === selectedUnit.id && q.type === QuestionType.TRUE_FALSE) && (
+                  <button
+                    onClick={() => startSpeedrunQuiz(selectedUnit.id)}
+                    className="w-full bg-gradient-to-r from-indigo-700 to-indigo-800 hover:from-indigo-600 hover:to-indigo-700 text-white text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm border-none"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>تحدي الصح والخطأ السريع</span>
+                  </button>
+                )}
+                {QUESTIONS.some(q => q.unitId === selectedUnit.id && q.type === QuestionType.MATCH) && (
+                  <button
+                    onClick={() => startMatchGame(selectedUnit.id)}
+                    className="w-full bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm border-none"
+                  >
+                    <Award className="w-4 h-4" />
+                    <span>لعبة التوصيل الذكي</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* CURRICULUM READING SUBTAB */}
+            {quizMode === "none" && lessonActiveSubTab === "lessons" && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans">
+                <div className="bg-[#121020] border border-indigo-950 rounded-xl p-4 flex flex-col gap-2 h-fit">
+                  <span className="text-[10px] text-slate-400 font-bold tracking-wider pr-1 block">قائمة فصول الوحدة:</span>
+                  {selectedUnit.lessons.map((less, idx) => (
+                    <button
+                      key={less.id}
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setCurrentLessonIdx(idx);
+                      }}
+                      className={`w-full text-right p-3 rounded-lg border text-sm transition-all duration-200 block cursor-pointer ${
+                        currentLessonIdx === idx
+                          ? "bg-amber-800 text-white border-amber-600 font-serif font-bold shadow"
+                          : "bg-[#18152c] hover:bg-[#201c3e] text-slate-200 border-indigo-950/60"
+                      }`}
+                    >
+                      {idx + 1}. {less.title}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Current Selected Lesson Details */}
+                  <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6">
+                    <div className="border-b border-indigo-950 pb-4">
+                      <span className="text-amber-500 text-xs font-bold uppercase block tracking-wider font-sans">الفصل {currentLessonIdx + 1}</span>
+                      <h3 className="text-2xl font-bold font-serif text-slate-100 mt-1">{selectedUnit.lessons[currentLessonIdx].title}</h3>
+                    </div>
+
+                    {/* Integrated custom synthesized SVG vector illustrations describing events */}
+                    <SVGIllustration type={selectedUnit.lessons[currentLessonIdx].illustration} className="w-full h-52 bg-slate-950/40 rounded-xl border border-indigo-950/40" />
+
+                    <div className="space-y-4 text-slate-200 text-base leading-relaxed text-right md:text-justify font-serif">
+                      {selectedUnit.lessons[currentLessonIdx].content.map((p, pIdx) => (
+                        <p key={pIdx}>{p}</p>
+                      ))}
+                    </div>
+
+                    {/* Key points box (أهم ما نستخلصه) */}
+                    <div className="bg-[#171120] border border-indigo-950/60 rounded-xl p-5 space-y-3">
+                      <span className="font-serif font-bold text-slate-100 text-sm flex items-center gap-1.5 justify-end">
+                        <span>أهَمُّ ملامِحِ الدَّرسِ لِلحفظِ السَّريع:</span>
+                        <Award className="w-4 h-4 text-amber-400 fill-amber-950" />
+                      </span>
+                      <ul className="space-y-2 text-xs md:text-sm text-slate-300 list-disc list-inside">
+                        {selectedUnit.lessons[currentLessonIdx].keyPoints.map((kp, kpIdx) => (
+                          <li key={kpIdx} className="leading-relaxed list-none text-right flex items-center justify-end gap-1 font-serif">
+                            <span>{kp}</span>
+                            <span className="text-amber-400 shrink-0 select-none font-bold">✔</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Footer navigate buttons inside lessons */}
+                    <div className="flex items-center justify-between border-t border-indigo-950/40 pt-4 shrink-0 font-sans">
+                      <button
+                        disabled={currentLessonIdx === 0}
+                        onClick={() => {
+                          handlePlaySound("click");
+                          setCurrentLessonIdx(prev => prev - 1);
+                        }}
+                        className="bg-[#1b1930] hover:bg-[#252244] disabled:opacity-50 text-slate-100 px-4 py-2 rounded-xl border border-indigo-900/40 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <ChevronRight className="w-4 h-4 transform rotate-180" />
+                        <span>الدرس السابق</span>
+                      </button>
+                      <span className="text-xs font-bold text-slate-400 font-sans">
+                        {currentLessonIdx + 1} / {selectedUnit.lessons.length}
+                      </span>
+                      <button
+                        disabled={currentLessonIdx === selectedUnit.lessons.length - 1}
+                        onClick={() => {
+                          handlePlaySound("click");
+                          setCurrentLessonIdx(prev => prev + 1);
+                        }}
+                        className="bg-amber-800 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>الدرس التالي</span>
+                        <ChevronLeft className="w-4 h-4 transform rotate-180" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CURRICULUM TIMELINE SUBTAB */}
+            {quizMode === "none" && lessonActiveSubTab === "timeline" && (
+              <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6">
+                <div className="text-center space-y-1">
+                  <h3 className="text-xl font-bold font-serif text-slate-100">الخط الزمني التاريخي لأحداث الوحدة</h3>
+                  <p className="text-xs text-slate-400 font-sans">تصفّح الأحداث الكبرى وتواريخ الملوك والمعارك والنهضات مرتبة زمانياً</p>
+                </div>
+
+                {/* Horizontal scroll timeline track list */}
+                <div className="flex items-center justify-between border-b border-indigo-950/60 pb-8 overflow-x-auto whitespace-nowrap scrollbar-none py-4 px-2 select-none gap-6">
+                  {selectedUnit.timeline.map((ev, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setTimelineIndex(idx);
+                      }}
+                      className="relative flex flex-col items-center shrink-0 cursor-pointer focus:outline-none transition group"
+                    >
+                      {/* Connection Line */}
+                      {idx > 0 && (
+                        <div className={`absolute right-1/2 translate-x-[50%] top-4 w-[120px] md:w-[150px] h-0.5 -z-10 ${
+                          timelineIndex >= idx ? "bg-amber-500" : "bg-[#18152c] h-0.5"
+                        }`}></div>
+                      )}
+                      
+                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
+                        timelineIndex === idx
+                          ? "bg-amber-950 border-amber-400 scale-125 shadow-md"
+                          : "bg-[#18152c] hover:bg-[#201c3e] border-indigo-950/80 group-hover:scale-110"
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${timelineIndex === idx ? "bg-white" : "bg-amber-500"}`}></div>
+                      </div>
+                      
+                      <span className={`text-sm font-bold font-serif mt-2 block ${timelineIndex === idx ? "text-amber-400 font-extrabold" : "text-slate-350"}`}>
+                        {ev.year}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-sans block max-w-[80px] truncate">{ev.title}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Selected Timeline Card Description */}
+                <div className="bg-[#1a1122]/90 rounded-2xl border border-indigo-950/60 p-6 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                  <div className="md:col-span-2 space-y-3 text-right">
+                    <span className="bg-[#110e1a] border border-amber-900/40 text-amber-400 font-serif text-sm font-bold px-3 py-1 rounded-full">{selectedUnit.timeline[timelineIndex].year}</span>
+                    <h4 className="text-xl font-bold font-serif text-amber-400 mt-2">{selectedUnit.timeline[timelineIndex].title}</h4>
+                    <p className="text-sm md:text-base text-slate-200 leading-relaxed font-serif">{selectedUnit.timeline[timelineIndex].description}</p>
+                  </div>
+                  {/* Decorative badge box */}
+                  <div className="bg-[#110e1a]/80 rounded-xl border border-indigo-950/50 p-4 aspect-square flex flex-col items-center justify-center h-full text-center">
+                    <Star className="w-14 h-14 text-amber-400 animate-spin-slow mb-2 fill-amber-400" />
+                    <span className="text-slate-100 font-serif font-bold text-xs uppercase tracking-wider">سجل المؤرخ</span>
+                    <span className="text-[10px] text-slate-450 font-sans">الوحدة {selectedUnit.id} • السنة {selectedUnit.timeline[timelineIndex].year}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CURRICULUM FLASHCARDS SUBTAB */}
+            {quizMode === "none" && lessonActiveSubTab === "flashcards" && (
+              <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6">
+                <div className="text-center space-y-1">
+                  <h3 className="text-xl font-bold font-serif text-slate-100">بطاقات المراجعة السريعة والذكية</h3>
+                  <p className="text-xs text-slate-400 font-sans">انتقِر البطاقة لعرض الإجابة السريعة واختبار معلوماتك</p>
+                </div>
+
+                {/* Flipcard Wrapper */}
+                <div className="flex flex-col items-center justify-center py-6 select-none font-sans">
+                  <div
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setFlashcardFlipped(!flashcardFlipped);
+                    }}
+                    className="w-full max-w-lg h-56 cursor-pointer relative transition-all duration-500 perspective-1000 shadow-xl rounded-2xl border border-indigo-950"
+                  >
+                    {/* card face */}
+                    <div className={`absolute inset-0 w-full h-full rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center text-center transition-all duration-300 ${
+                      flashcardFlipped
+                        ? "bg-gradient-to-br from-[#1b1236] to-[#2e1d13] text-white border-amber-500/30 shadow-inner"
+                        : "bg-gradient-to-br from-[#121020] to-[#18152c] text-slate-100 border-indigo-950"
+                    }`}>
+                      <span className="text-[10px] tracking-wider uppercase font-bold text-amber-400 block mb-2">
+                        {flashcardFlipped ? "الإجابة الصحيحة" : "سؤال التحدي والذكاء"}
+                      </span>
+                      
+                      <h4 className="text-lg md:text-xl font-bold font-serif leading-relaxed font-sans">
+                        {flashcardFlipped
+                          ? selectedUnit.flashcards[flashcardIdx].back
+                          : selectedUnit.flashcards[flashcardIdx].front}
+                      </h4>
+
+                      <span className={`text-[10px] absolute bottom-4 bg-[#1b1930] text-slate-200 px-3 py-1 rounded-full font-bold border border-indigo-900/30 ${flashcardFlipped ? "bg-amber-850/40 text-amber-200" : ""}`}>
+                        {flashcardFlipped ? "انقر لرؤية السؤال ↩" : "انقر لرؤية الإجابة ↪"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Flashcard nav controller */}
+                  <div className="flex items-center gap-6 mt-6 justify-center">
+                    <button
+                      disabled={flashcardIdx === 0}
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setFlashcardIdx(prev => prev - 1);
+                        setFlashcardFlipped(false);
+                      }}
+                      className="bg-[#1b1930] hover:bg-[#252244] border border-indigo-900/50 disabled:opacity-50 text-slate-100 p-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center shrink-0 cursor-pointer shadow-sm"
+                    >
+                      <ChevronRight className="w-5 h-5 animate-pulse" />
+                    </button>
+                    <span className="text-xs font-bold text-slate-350 font-sans">
+                      البطاقة {flashcardIdx + 1} من {selectedUnit.flashcards.length}
+                    </span>
+                    <button
+                      disabled={flashcardIdx === selectedUnit.flashcards.length - 1}
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setFlashcardIdx(prev => prev + 1);
+                        setFlashcardFlipped(false);
+                      }}
+                      className="bg-[#1b1930] hover:bg-[#252244] border border-indigo-900/50 disabled:opacity-50 text-slate-100 p-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center shrink-0 cursor-pointer shadow-sm"
+                    >
+                      <ChevronLeft className="w-5 h-5 animate-pulse" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+                          {/* CURRICULUM LIVE CHALLENGES: A) MCQ & True-False QUIZ */}
+            {quizMode === "curriculum" && (
+              <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6">
+                {quizIdx < quizQuestions.length ? (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between border-b border-indigo-950 pb-4">
+                      <div>
+                        <h4 className="text-lg font-bold font-serif text-slate-100">الاختبار الشامل للوحدة</h4>
+                        <p className="text-xs text-slate-400 mt-1 font-sans">السؤال {quizIdx + 1} من {quizQuestions.length}</p>
+                      </div>
+                      <span className="bg-amber-850 text-white font-sans text-xs px-2.5 py-1 rounded border border-amber-600/30">المرحلة {quizIdx + 1}</span>
+                    </div>
+
+                    <p className="text-lg md:text-xl font-bold font-serif text-slate-200 leading-relaxed text-right">
+                      {quizQuestions[quizIdx].text}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Render statement option values based on MCQ or Yes/No */}
+                      {(quizQuestions[quizIdx].options || ["صواب", "خطأ"]).map((option, oIdx) => {
+                        const isSelected = selectedOption === option;
+                        const isCorrectAnswer = option === quizQuestions[quizIdx].correctAnswer;
+                        
+                        let optStyle = "bg-[#18152c] hover:bg-[#221e3f] border-indigo-950 text-slate-200 hover:scale-[1.01] cursor-pointer";
+                        if (selectedOption) {
+                          if (isCorrectAnswer) {
+                            optStyle = "bg-emerald-950/80 border-emerald-500 text-emerald-300 scale-[1.01] font-bold";
+                          } else if (isSelected) {
+                            optStyle = "bg-red-950/80 border-red-500 text-red-350";
+                          } else {
+                            optStyle = "bg-[#121020] border-indigo-950/20 text-slate-500 opacity-40 cursor-not-allowed";
+                          }
+                        }
+
+                        return (
+                          <button
+                            key={oIdx}
+                            disabled={!!selectedOption}
+                            onClick={() => handleAnswerSelection(option)}
+                            className={`w-full text-right p-4 rounded-xl border text-sm font-bold transition flex items-center justify-between ${optStyle}`}
+                          >
+                            <span>{option}</span>
+                            {selectedOption && isCorrectAnswer && <span className="text-emerald-400 text-xs font-semibold">✔ صواب</span>}
+                            {selectedOption && isSelected && !isCorrectAnswer && <span className="text-red-400 text-xs font-semibold">✘ خطأ</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selectedOption && (
+                      <div className="bg-[#171120] p-4 rounded-xl border border-indigo-950/65 animate-[fadeIn_0.5s_ease-out] text-right space-y-1.5 shrink-0 font-serif">
+                        <span className="text-amber-400 font-bold block text-sm">💡 الشرح والتبسيط من منهج الصف السَّادس:</span>
+                        <p className="text-xs md:text-sm text-slate-250 leading-relaxed">
+                          {quizQuestions[quizIdx].explanation || "الإجابة الصحيحة مذكورة بالدروس لتعزيز كفاءتك المعرفية."}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end pt-3">
+                      <button
+                        disabled={!selectedOption}
+                        onClick={handleNextQuiz}
+                        className="bg-amber-800 disabled:opacity-50 text-white px-6 py-3 rounded-xl hover:bg-amber-700 text-sm font-bold flex items-center gap-1.5 shadow cursor-pointer transition border border-amber-600/20"
+                      >
+                        <span>{quizIdx + 1 === quizQuestions.length ? "رؤية النتائج النهائية 🏁" : "السؤال التالي"}</span>
+                        <ChevronLeft className="w-4 h-4 transform rotate-180" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Quiz completed card
+                  <div className="text-center p-8 space-y-6">
+                    <Trophy className="w-16 h-16 text-amber-400 mx-auto animate-bounce fill-amber-500/20" />
+                    <div className="space-y-2">
+                      <h3 className="text-2xl font-bold font-serif text-slate-100">أتممت الاختبار النهائي بنجاح! 🎉</h3>
+                      <p className="text-xs text-slate-400">لقد أحرزت {quizCorrectAnswers} إجابات صحيحة من أصل {quizQuestions.length}</p>
+                    </div>
+
+                    {/* Progress score feedback reward */}
+                    <div className="inline-flex items-center gap-2.5 bg-[#1b1226] px-6 py-3 rounded-2xl border border-indigo-950/80">
+                      <Star className="w-5 h-5 text-amber-450 fill-amber-450" />
+                      <span className="text-sm font-serif font-bold text-amber-300 text-right">
+                        لقد نلت +{quizCorrectAnswers * 10} نقاط معرفة إضافية تضاف لرصيدك!
+                      </span>
+                    </div>
+
+                    {/* Badge unlock reward */}
+                    {(((quizCorrectAnswers / quizQuestions.length) * 100) >= 80) ? (
+                      <div className="bg-[#11241a] text-emerald-400 p-4 rounded-xl border border-[#1b3d2b] text-sm font-semibold max-w-md mx-auto leading-relaxed">
+                        🎖️ رائع! نظراً لتحقيقك نسبة فوز تتجاوز 80%، تم فتح وسام الوحدة الخاص بك وإضافته لملفك الشخصي بنجاح!
+                      </div>
+                    ) : (
+                      <div className="bg-[#241a11] text-amber-400 p-4 rounded-xl border border-[#3b291a] text-xs font-medium max-w-md mx-auto leading-relaxed">
+                        📖 لم تحقق 80% للحصول على الوسام هذه المرة، لكن واصل مطالعة الدروس والخط الزمني وتحدّ مرة أخرى بثقة!
+                      </div>
+                    )}
+
+                    <div className="flex justify-center gap-3 pt-4">
+                      <button
+                        onClick={() => {
+                          handlePlaySound("click");
+                          setQuizMode("none");
+                        }}
+                        className="bg-amber-800 text-white px-5 py-2.5 rounded-xl hover:bg-amber-750 text-xs font-bold transition shadow border border-amber-600/30 cursor-pointer"
+                      >
+                        العودة لقراءة المنهج
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* CURRICULUM LIVE CHALLENGES: B) TRUE/FALSE SPEEDRUN */}
+            {quizMode === "speedrun" && (
+              <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6 max-w-2xl mx-auto">
+                {quizIdx < quizQuestions.length ? (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between border-b border-indigo-950 pb-4">
+                      <div className="flex items-center gap-2 text-amber-400">
+                        <Clock className="w-5 h-5 animate-pulse" />
+                        <span className="font-sans font-bold text-sm">تحدي السرعة (صح أو خطأ)</span>
+                      </div>
+                      <span className="text-xs font-sans text-slate-400">مرحلة {quizIdx + 1} من {quizQuestions.length}</span>
+                    </div>
+
+                    {/* Visual countdown timer */}
+                    <div className="space-y-1 text-center">
+                      <span className={`text-base font-serif font-extrabold ${speedrunTimer <= 5 ? "text-red-400 animate-pulse" : "text-amber-400"}`}>
+                        متبقي {speedrunTimer} ثوانٍ!
+                      </span>
+                      <div className="w-full bg-[#18152c] h-2.5 rounded-full overflow-hidden border border-indigo-950/40">
+                        <div
+                          className={`h-full transition-all duration-1000 ${speedrunTimer <= 5 ? "bg-red-500" : "bg-amber-500"}`}
+                          style={{ width: `${(speedrunTimer / 15) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Question prompt statement */}
+                    <div className="bg-[#1b1930] hover:bg-[#201c3e] border border-indigo-950/80 rounded-2xl p-6 text-center select-none shadow-inner">
+                      <p className="text-lg md:text-xl font-bold font-serif text-slate-100 leading-relaxed">
+                        {quizQuestions[quizIdx].text}
+                      </p>
+                    </div>
+
+                    {/* Options buttons */}
+                    <div className="grid grid-cols-2 gap-4 font-serif">
+                      <button
+                        onClick={() => handleSpeedrunAnswer("صواب")}
+                        className="bg-emerald-700 hover:bg-emerald-600 text-white text-base py-4 rounded-xl shadow-md border border-emerald-600/30 hover:scale-[1.01] active:scale-[0.99] font-bold transition duration-200 cursor-pointer"
+                      >
+                        صواب (✔)
+                      </button>
+                      <button
+                        onClick={() => handleSpeedrunAnswer("خطأ")}
+                        className="bg-red-700 hover:bg-red-600 text-white text-base py-4 rounded-xl shadow-md border border-red-600/30 hover:scale-[1.01] active:scale-[0.99] font-bold transition duration-200 cursor-pointer"
+                      >
+                        خطأ (✘)
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Speedrun ended card
+                  <div className="text-center p-8 space-y-6">
+                    <Trophy className="w-16 h-16 text-amber-400 mx-auto animate-bounce" />
+                    <div className="space-y-2">
+                      <h3 className="text-2xl font-bold font-serif text-slate-100">انتهى تحدي السرعة الخارق! ⭐</h3>
+                      <p className="text-xs text-slate-400 font-sans">صبت إجابات صحيحة في {quizCorrectAnswers} ثوانٍ من أصل {quizQuestions.length}</p>
+                    </div>
+
+                    <div className="bg-[#1b1226] border border-indigo-950/80 p-4 rounded-xl max-w-sm mx-auto text-amber-300 text-sm font-serif">
+                      لقد نلت +{quizCorrectAnswers * 15} نقاط معرفة مضافة لملفك الشخصي لقاء شجاعتك وسرعتك الفورية!
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQuizMode("none");
+                      }}
+                      className="bg-amber-800 text-white px-5 py-2.5 rounded-xl hover:bg-amber-750 text-xs font-bold transition shadow border border-amber-600/30 cursor-pointer"
+                    >
+                      الرجوع لقراءة الفصول
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* CURRICULUM LIVE CHALLENGES: C) TAP MATCHING PAIRS */}
+            {quizMode === "match" && (
+              <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6">
+                <div className="text-center space-y-1 border-b border-indigo-950 pb-4">
+                  <h3 className="text-lg font-bold font-serif text-slate-100">لعبة التوصيل الذكية والألقاب</h3>
+                  <p className="text-xs text-slate-400 font-sans">انقر على المربع من العمود الأيمن ثم شريكه المناسب من العمود الأيسر</p>
+                </div>
+
+                {/* Left & Right Grids */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-right select-none font-sans">
+                  {/* Left Column (Historical names or events) */}
+                  <div className="space-y-3">
+                    <span className="text-xs text-slate-400 font-bold block mb-1">العمود الأيسر:</span>
+                    {matchLeft.map((leftNode) => {
+                      const isMatched = !!matchedPairs[leftNode.id];
+                      const isSelected = selectedLeft === leftNode.id;
+                      const isWrong = wrongMatchLeft === leftNode.id;
+
+                      let boxStyle = "bg-[#18152c] border-indigo-950/40 text-slate-200 hover:bg-[#201c3e] cursor-pointer";
+                      if (isMatched) {
+                        boxStyle = "bg-emerald-950/40 border-emerald-800/60 text-emerald-300 opacity-50 pointer-events-none";
+                      } else if (isSelected) {
+                        boxStyle = "bg-indigo-950/90 border-indigo-500 text-indigo-300 scale-[1.02] ring-2 ring-indigo-500/40 font-bold";
+                      } else if (isWrong) {
+                        boxStyle = "bg-red-950 border-red-500 text-red-300 scale-[1.02] animate-shake";
+                      }
+
+                      return (
+                        <div
+                          key={leftNode.id}
+                          onClick={() => handleLeftTap(leftNode.id)}
+                          className={`p-3.5 rounded-xl border text-sm font-serif font-semibold transition-all flex items-center justify-between ${boxStyle}`}
+                        >
+                          <span>{leftNode.text}</span>
+                          {isMatched && <span className="bg-emerald-600 text-white rounded-full p-0.5 text-[8px]">✔</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right Column (Descriptions/Matches) */}
+                  <div className="space-y-3">
+                    <span className="text-xs text-slate-400 font-bold block mb-1">العمود الأيمن:</span>
+                    {matchRight.map((rightNode) => {
+                      const isMatched = Object.values(matchedPairs).includes(rightNode.id);
+                      const isWrong = wrongMatchRight === rightNode.id;
+                      const isDisabled = !selectedLeft;
+
+                      let boxStyle = "bg-[#18152c] border-indigo-950/40 text-slate-200 hover:bg-[#201c3e] cursor-pointer";
+                      if (isMatched) {
+                        boxStyle = "bg-emerald-950/40 border-emerald-800/60 text-emerald-300 opacity-50 pointer-events-none";
+                      } else if (isDisabled) {
+                        boxStyle = "bg-[#121020] border-indigo-950/10 text-slate-500 opacity-40 cursor-not-allowed";
+                      } else if (isWrong) {
+                        boxStyle = "bg-red-950 border-red-500 text-red-200 scale-[1.02] animate-shake";
+                      }
+
+                      return (
+                        <div
+                          key={rightNode.id}
+                          onClick={() => handleRightTap(rightNode.id)}
+                          className={`p-3.5 rounded-xl border text-sm font-serif transition-all flex items-center justify-between ${boxStyle}`}
+                        >
+                          <span>{rightNode.text}</span>
+                          {isMatched && <span className="bg-emerald-600 text-white rounded-full p-0.5 text-[8px]">✔</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Match game completed check */}
+                {Object.keys(matchedPairs).length === matchLeft.length && (
+                  <div className="bg-[#11241a] text-emerald-400 p-5 rounded-2xl border border-[#1b3d2b] text-center space-y-4 max-w-md mx-auto animate-[fadeIn_0.5s_ease-out]">
+                    <Trophy className="w-12 h-12 text-emerald-400 mx-auto" />
+                    <div>
+                      <h4 className="font-serif font-bold text-lg">أحسنت التوصيل يا بطل! 🎖️</h4>
+                      <p className="text-xs text-slate-300 mt-1">طابقت كافة الشخصيات والحقائق بالوصف والتواريخ المطابقة لها بنجاح!</p>
+                    </div>
+                    <span className="bg-[#1b1226] text-amber-300 font-bold text-sm px-4 py-1.5 rounded-full inline-block border border-indigo-950">
+                      ربحت +50 نقاط معرفة إضافية!
+                    </span>
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQuizMode("none");
+                      }}
+                      className="bg-amber-800 hover:bg-amber-750 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow mx-auto block cursor-pointer border border-amber-600/20"
+                    >
+                      الرجوع لدروس الفصل
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* Visual bottom parchment style design separator */}
+      <footer className="bg-[#09080f]/90 border-t border-indigo-950/65 py-6 text-center text-slate-400 text-xs shrink-0 font-sans mt-auto">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="font-serif text-slate-350 select-none">© {new Date().getFullYear()} المُؤَرِّخ الصَّغِير – جُمْهُورِيَّةُ السُّودَانِ - مَنَاهِجُ المَرْكَزُ القَوْمِي لِلمَنَاهِجِ وَالبَحْثِ التَّرْبَوِي بِبَخْتِ الرِّضَا</p>
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("badges");
+              }}
+              className="hover:text-amber-400 font-bold transition cursor-pointer"
+            >
+              لوحة الأوسمة
+            </button>
+            <span className="text-slate-650">•</span>
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("map");
+              }}
+              className="hover:text-amber-400 font-bold transition cursor-pointer"
+            >
+              خريطة المعرفة التفاعلية
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
