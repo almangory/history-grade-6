@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents the student's profile, including their historical knowledge points and unlocked educational badges.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique user ID matching request.auth.uid"
+        },
+        "name": {
+          "type": "string",
+          "description": "Student's screen name"
+        },
+        "avatar": {
+          "type": "string",
+          "description": "ID of chosen explorer avatar"
+        },
+        "score": {
+          "type": "integer",
+          "description": "Accumulated Knowledge Points (Score)"
+        },
+        "unlockedBadges": {
+          "type": "array",
+          "description": "List of unlocked badge IDs"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": ["uid", "name", "avatar", "score", "unlockedBadges", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Represents a single message in the AI chatbot tutoring thread.",
+      "type": "object",
+      "properties": {
+        "sender": {
+          "type": "string",
+          "description": "Who sent this message (user or bot)"
+        },
+        "text": {
+          "type": "string",
+          "description": "Message text content"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the message was sent"
+        }
+      },
+      "required": ["sender", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Root collection for user profiles"
+    },
+    "/users/{userId}/chatHistory/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Subcollection storing persistent chat records with the intelligent AI history tutor"
+    }
+  }
+}

@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net - Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Master identity and validation helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity validation: User profile
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['uid', 'name', 'avatar', 'score', 'unlockedBadges', 'updatedAt'])
+        && data.keys().size() == 6
+        && data.uid == userId
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 100
+        && data.avatar is string
+        && data.avatar.size() <= 50
+        && data.score is int
+        && data.score >= 0
+        && data.unlockedBadges is list
+        && data.unlockedBadges.size() <= 100
+        && data.updatedAt == request.time;
+    }
+
+    // Match root user profiles
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data, userId);
+      allow update: if isOwner(userId)
+        && isValidUser(request.resource.data, userId)
+        && request.resource.data.uid == resource.data.uid; // profile uid is immutable
+      allow delete: if false; // protect accounts from deletion
+
+      // Match chat messages subcollection (Master Gate ensures parent identity match)
+      match /chatHistory/{messageId} {
+        function isValidChatMessage(data) {
+          return data.keys().hasAll(['sender', 'text', 'timestamp'])
+            && data.keys().size() == 3
+            && data.sender is string
+            && (data.sender == 'user' || data.sender == 'bot')
+            && data.text is string
+            && data.text.size() > 0
+            && data.text.size() <= 10000
+            && data.timestamp == request.time;
+        }
+
+        allow list, get: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidChatMessage(request.resource.data);
+        allow update, delete: if false; // AI Tutor history is append-only
+      }
+    }
+  }
+}

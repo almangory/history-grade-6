@@ -10,6 +10,9 @@ import { playSound } from "./components/SoundEffects";
 import { SVGIllustration } from "./components/SVGIllustrations";
 import { MapExplorer } from "./components/MapExplorer";
 import { AIChatBot } from "./components/AIChatBot";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, signInWithGoogle, logoutUser, db } from "./firebase";
 import {
   Compass,
   BookOpen,
@@ -38,6 +41,10 @@ import {
 } from "lucide-react";
 
 export default function App() {
+  // Firebase Auth states
+  const [currentUser, setCurrentUser] = React.useState<any>(null);
+  const [loadingAuth, setLoadingAuth] = React.useState<boolean>(true);
+
   // Game & User Progression States
   const [useSound, setUseSound] = useState(true);
   const [userName, setUserName] = useState<string>(() => {
@@ -54,6 +61,76 @@ export default function App() {
     const saved = localStorage.getItem("sub_historian_badges");
     return saved ? JSON.parse(saved) : [];
   });
+
+  // 1. Google Sign-In & Auth State Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          const docSnap = await getDoc(userDocRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserName(data.name || user.displayName || "مستكشف");
+            setUserAvatar(data.avatar || "explorer");
+            setScore(data.score ?? 100);
+            setUnlockedBadges(data.unlockedBadges || []);
+          } else {
+            // New user login with Google - create profile in Firestore
+            const defaultName = user.displayName || "بطل تاريخي";
+            const defaultAvatar = "explorer";
+            const initialScore = 100;
+            const initialBadges: string[] = [];
+
+            await setDoc(userDocRef, {
+              uid: user.uid,
+              name: defaultName,
+              avatar: defaultAvatar,
+              score: initialScore,
+              unlockedBadges: initialBadges,
+              updatedAt: serverTimestamp()
+            });
+
+            setUserName(defaultName);
+            setUserAvatar(defaultAvatar);
+            setScore(initialScore);
+            setUnlockedBadges(initialBadges);
+          }
+        } catch (error) {
+          console.error("Error fetching or creating user profile in Firestore:", error);
+        }
+      }
+      setLoadingAuth(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Debounced Cloud Sync when progress updates
+  useEffect(() => {
+    if (currentUser) {
+      const userDocRef = doc(db, "users", currentUser.uid);
+      const syncToCloud = async () => {
+        try {
+          await setDoc(userDocRef, {
+            uid: currentUser.uid,
+            name: userName,
+            avatar: userAvatar,
+            score: score,
+            unlockedBadges: unlockedBadges,
+            updatedAt: serverTimestamp()
+          });
+        } catch (error) {
+          console.error("Error syncing progress to Firestore:", error);
+        }
+      };
+
+      const timer = setTimeout(() => {
+        syncToCloud();
+      }, 1500); // 1.5s debounce ensures we don't bombard Firestore with quick micro-updates
+      return () => clearTimeout(timer);
+    }
+  }, [userName, userAvatar, score, unlockedBadges, currentUser]);
 
   // App Navigation States
   const [currentTab, setCurrentTab] = useState<"dashboard" | "unit" | "map" | "chat" | "quiz_hub" | "badges">("dashboard");
@@ -337,6 +414,16 @@ export default function App() {
     }
   };
 
+  // Loading check
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen bg-[#09080f] flex flex-col items-center justify-center font-serif text-slate-100 gap-3">
+        <Sparkles className="w-10 h-10 text-amber-500 animate-spin" />
+        <p className="text-sm font-sans text-slate-400">جاري تحميل سجل البطل...</p>
+      </div>
+    );
+  }
+
   // Logged-out Welcome Parchment Style Form
   if (!userName) {
     return (
@@ -345,7 +432,7 @@ export default function App() {
         <div className="absolute top-10 left-10 w-48 h-48 bg-indigo-900/30 rounded-full filter blur-3xl opacity-50 animate-pulse"></div>
         <div className="absolute bottom-10 right-10 w-64 h-64 bg-amber-900/10 rounded-full filter blur-2xl opacity-40 animate-pulse"></div>
 
-        <div className="bg-[#121020] border border-slate-800/50 max-w-xl w-full rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.6)] p-8 md:p-12 relative">
+        <div className="bg-[#121020] border border-slate-800/50 max-w-xl w-full rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.6)] p-8 md:p-12 relative text-right">
           {/* Internal Vintage Border */}
           <div className="absolute inset-3 border border-slate-800/30 rounded-2xl pointer-events-none"></div>
 
@@ -364,7 +451,45 @@ export default function App() {
               </p>
             </div>
 
-            <form onSubmit={handleStartGame} className="space-y-6 pt-4">
+            {/* Google Sign-In Wall Option */}
+            <div className="bg-[#18152c]/90 border border-indigo-950 rounded-2xl p-6 text-center space-y-4">
+              <div className="flex items-center justify-center gap-2 text-amber-400">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+                <span className="font-bold text-sm font-sans">التسجيل السحابي والذكاء الاصطناعي</span>
+              </div>
+              <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                سجل دخولك باستخدام Google لحفظ نقاط وتقدم دراستك في السحاب ولتفعيل حوار المعلم التاريخي الذكي فورا!
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    handlePlaySound("click");
+                    await signInWithGoogle();
+                  } catch (e) {
+                    console.error("Popup Sign in fail", e);
+                  }
+                }}
+                className="mx-auto w-fit bg-white hover:bg-slate-100 text-slate-900 font-sans font-bold text-xs py-3 px-6 rounded-xl flex items-center justify-center gap-2.5 transition active:scale-[0.98] cursor-pointer shadow-md"
+              >
+                {/* Google Logo SVG */}
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#EA4335" d="M12 5.04c1.7 0 3.23.58 4.43 1.73l3.31-3.3C17.74 1.54 15.01 1 12 1 7.15 1 3.1 3.94 1.25 8.16l3.96 3.07C6.15 7.6 8.78 5.04 12 5.04z" />
+                  <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.47h6.44c-.28 1.47-1.11 2.71-2.36 3.56l3.66 2.84c2.14-1.97 3.75-4.87 3.75-8.51z" />
+                  <path fill="#FBBC05" d="M5.21 11.23c-.24-.72-.38-1.5-.38-2.3s.14-1.58.38-2.3L1.25 8.16C.45 9.77 0 11.58 0 13.5s.45 3.73 1.25 5.34l3.96-3.07c-.24-.72-.38-1.5-.38-2.3s.14-1.58.38-2.3z" />
+                  <path fill="#34A853" d="M12 23c3.24 0 5.96-1.07 7.95-2.91l-3.66-2.84c-1.01.68-2.31 1.09-3.79 1.09-3.22 0-5.85-2.56-6.79-6.19l-3.96 3.07C3.1 20.06 7.15 23 12 23z" />
+                </svg>
+                <span>الدخول الفوري السريع بحساب Google</span>
+              </button>
+            </div>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-slate-800/40"></div>
+              <span className="flex-shrink mx-4 text-xs text-slate-500 font-sans">أو الاستمرار كضيف دون مزايا الذكاء الاصطناعي</span>
+              <div className="flex-grow border-t border-slate-800/40"></div>
+            </div>
+
+            <form onSubmit={handleStartGame} className="space-y-6">
               <div className="space-y-2 text-right">
                 <label className="block text-sm font-bold text-slate-200 pr-1">
                   مرحباً بك يا بطل! ما هو اسمك الكريم؟
@@ -495,12 +620,34 @@ export default function App() {
               </div>
             </div>
 
-            {/* Avatar display */}
+            {/* Avatar display with Google status & log-out */}
             <div className="flex items-center gap-2 border-r pr-3 border-indigo-950/60 mr-1">
               {renderAvatar(userAvatar, "w-10 h-10")}
               <div className="text-right hidden sm:block">
-                <div className="text-[11px] font-bold text-slate-200">{userName}</div>
-                <div className="text-[10px] text-slate-400">مستوى {Math.floor(score / 300) + 1}</div>
+                <div className="text-[11px] font-bold text-slate-200 flex items-center gap-1 justify-end">
+                  {currentUser && (
+                    <span className="bg-amber-400/15 text-amber-300 text-[9px] px-1.5 py-0.5 rounded font-sans scale-90 order-last">
+                      جوجل
+                    </span>
+                  )}
+                  <span>{userName}</span>
+                </div>
+                <div className="text-[10px] text-slate-400 flex items-center justify-end gap-2">
+                  {currentUser && (
+                    <button
+                      onClick={async () => {
+                        handlePlaySound("click");
+                        await logoutUser();
+                        setUserName("");
+                        localStorage.removeItem("sub_historian_name");
+                      }}
+                      className="text-red-400 hover:text-red-300 underline font-bold cursor-pointer transition text-[9px]"
+                    >
+                      خروج
+                    </button>
+                  )}
+                  <span>مستوى {Math.floor(score / 300) + 1}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -716,7 +863,7 @@ export default function App() {
               <ArrowRight className="w-4 h-4 transform rotate-180" />
               <span>العودة للرئيسية</span>
             </button>
-            <AIChatBot />
+            <AIChatBot currentUser={currentUser} onSignInWithGoogle={signInWithGoogle} />
           </div>
         )}
 
