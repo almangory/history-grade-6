@@ -24,6 +24,7 @@ import {
   VolumeX,
   Home,
   ArrowRight,
+  ArrowLeft,
   HelpCircle,
   Trophy,
   Gamepad2,
@@ -39,7 +40,8 @@ import {
   Bot,
   Clock,
   Sun,
-  Moon
+  Moon,
+  Play
 } from "lucide-react";
 
 export default function App() {
@@ -150,6 +152,8 @@ export default function App() {
 
   // Play Mode States
   const [quizMode, setQuizMode] = useState<"none" | "curriculum" | "speedrun" | "match">("none");
+  const [quizType, setQuizType] = useState<"lesson" | "unit" | "comprehensive">("unit");
+  const [quizTitle, setQuizTitle] = useState<string>("");
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
   const [quizIdx, setQuizIdx] = useState(0);
   const [quizCorrectAnswers, setQuizAnswersCount] = useState(0);
@@ -170,6 +174,21 @@ export default function App() {
   // Initial user setup state (Temporary draft holding name)
   const [inputName, setInputName] = useState("");
   const [selectedAvatarDraft, setSelectedAvatarDraft] = useState("explorer");
+
+  // Quiz Hub States
+  const [qhCategory, setQhCategory] = useState<"lesson" | "unit" | "comprehensive">("comprehensive");
+  const [qhUnitId, setQhUnitId] = useState<number>(1);
+  const [qhLessonId, setQhLessonId] = useState<string>("u1_l1");
+  const [qhSize, setQhSize] = useState<number>(10);
+  const [qhChallengeType, setQhChallengeType] = useState<"mcq" | "speedrun" | "match">("mcq");
+
+  // Sync lesson ID when Unit selection changes in Quiz Hub
+  useEffect(() => {
+    const parentUnit = UNITS.find(u => u.id === qhUnitId);
+    if (parentUnit && parentUnit.lessons.length > 0) {
+      setQhLessonId(parentUnit.lessons[0].id);
+    }
+  }, [qhUnitId]);
 
   // Save progress automatically
   useEffect(() => {
@@ -261,17 +280,143 @@ export default function App() {
     setCurrentTab("unit");
   };
 
-  // Quiz Mode Initiator
+  // Quiz Mode Initiators
   const startComprehensiveQuiz = (unitId: number) => {
     handlePlaySound("click");
-    // Filter questions relevant to this unit
+    const matchingUnit = UNITS.find(u => u.id === unitId);
+    const titleText = matchingUnit ? matchingUnit.title : "";
     const filtered = QUESTIONS.filter(q => q.unitId === unitId);
     setQuizQuestions(filtered);
     setQuizIdx(0);
     setQuizAnswersCount(0);
     setSelectedOption(null);
     setAnsweredQuestionInGroup({});
+    setQuizType("unit");
+    setQuizTitle(`الاختبار النهائي للوحدة: ${titleText}`);
     setQuizMode("curriculum");
+  };
+
+  const startLessonQuiz = (lessonId: string, lessonTitle: string) => {
+    handlePlaySound("click");
+    const filtered = QUESTIONS.filter(q => q.lessonId === lessonId);
+    setQuizQuestions(filtered);
+    setQuizIdx(0);
+    setQuizAnswersCount(0);
+    setSelectedOption(null);
+    setAnsweredQuestionInGroup({});
+    setQuizType("lesson");
+    setQuizTitle(`اختبار فهم الدرس: ${lessonTitle}`);
+    setQuizMode("curriculum");
+  };
+
+  const startComprehensiveSubjectQuiz = () => {
+    handlePlaySound("click");
+    const shuffled = [...QUESTIONS].sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, 15);
+    setQuizQuestions(selected);
+    setQuizIdx(0);
+    setQuizAnswersCount(0);
+    setSelectedOption(null);
+    setAnsweredQuestionInGroup({});
+    setQuizType("comprehensive");
+    setQuizTitle("الامتحان الشامل والنهائي لكامل كتاب التاريخ");
+    setQuizMode("curriculum");
+  };
+
+  const startQuizHubCustom = (config: {
+    type: "lesson" | "unit" | "comprehensive";
+    unitId?: number;
+    lessonId?: string;
+    lessonTitle?: string;
+    questionCount: number;
+    challengeType: "mcq" | "speedrun" | "match";
+  }) => {
+    handlePlaySound("click");
+    
+    // 1. Gather pool of questions
+    let pool: Question[] = [];
+    let titleText = "";
+    
+    if (config.type === "comprehensive") {
+      pool = [...QUESTIONS];
+      titleText = "الامتحان النهائي الشامل لكامل كتاب التاريخ";
+    } else if (config.type === "unit") {
+      const matchUnit = UNITS.find(u => u.id === config.unitId);
+      pool = QUESTIONS.filter(q => q.unitId === config.unitId);
+      titleText = `الاختبار النهائي للوحدة: ${matchUnit ? matchUnit.title : ""}`;
+    } else if (config.type === "lesson") {
+      pool = QUESTIONS.filter(q => q.lessonId === config.lessonId);
+      titleText = `اختبار فهم الدرس: ${config.lessonTitle || ""}`;
+    }
+    
+    // Filter by type if speedrun or match
+    if (config.challengeType === "speedrun") {
+      pool = pool.filter(q => q.type === QuestionType.TRUE_FALSE);
+      if (pool.length === 0) {
+        // Fallback to general True/False
+        pool = QUESTIONS.filter(q => q.type === QuestionType.TRUE_FALSE);
+      }
+    } else if (config.challengeType === "match") {
+      pool = pool.filter(q => q.type === QuestionType.MATCH);
+      if (pool.length === 0) {
+        // Fallback to general Match
+        pool = QUESTIONS.filter(q => q.type === QuestionType.MATCH);
+      }
+    }
+    
+    if (pool.length === 0) {
+      pool = [...QUESTIONS];
+    }
+    
+    // Shuffle pool
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    
+    // Slice to the requested question count
+    const selected = shuffled.slice(0, Math.min(config.questionCount, shuffled.length));
+    
+    if (selected.length === 0) {
+      return;
+    }
+
+    // Set up standard keys
+    setQuizQuestions(selected);
+    setQuizIdx(0);
+    setQuizAnswersCount(0);
+    setSelectedOption(null);
+    setAnsweredQuestionInGroup({});
+    setQuizType(config.type);
+    
+    // Now trigger the appropriate mode!
+    if (config.challengeType === "speedrun") {
+      setSpeedrunTimer(15);
+      setActiveSpeedrunStatement(selected[0]);
+      setQuizMode("speedrun");
+      setQuizTitle(`تحدي السرعة (صح أو خطأ): ${titleText}`);
+    } else if (config.challengeType === "match") {
+      const sourceMatch = selected[0];
+      if (sourceMatch && sourceMatch.matchPairs) {
+        const leftSide = sourceMatch.matchPairs.map((p, idx) => ({ id: `L_${idx}`, text: p.left }));
+        const rightSide = sourceMatch.matchPairs.map((p, idx) => ({ id: `R_${idx}`, text: p.right }));
+        
+        const shuffledLeft = [...leftSide].sort(() => Math.random() - 0.5);
+        const shuffledRight = [...rightSide].sort(() => Math.random() - 0.5);
+
+        setMatchLeft(shuffledLeft);
+        setMatchRight(shuffledRight);
+        setSelectedLeft(null);
+        setMatchedPairs({});
+        setQuizMode("match");
+        setQuizTitle(`لعبة التوصيل الذكي: ${titleText}`);
+      } else {
+        // fallback to standard quiz if no match pairs found
+        setQuizMode("curriculum");
+        setQuizTitle(titleText);
+      }
+    } else {
+      // standard curriculum quiz
+      setQuizMode("curriculum");
+      setQuizTitle(titleText);
+    }
   };
 
   const startSpeedrunQuiz = (unitId: number) => {
@@ -327,7 +472,8 @@ export default function App() {
     if (isCorrect) {
       handlePlaySound("success");
       setQuizAnswersCount(prev => prev + 1);
-      setScore(prev => prev + 10);
+      const pts = quizType === "comprehensive" ? 15 : 10;
+      setScore(prev => prev + pts);
     } else {
       handlePlaySound("fail");
     }
@@ -342,10 +488,14 @@ export default function App() {
       // Quiz complete! Assess score
       const scorePercentage = (quizCorrectAnswers / quizQuestions.length) * 100;
       if (scorePercentage >= 80) {
-        // Unlock badge related to unit
-        const matchingUnit = UNITS.find(u => u.id === selectedUnitId);
-        if (matchingUnit) {
-          unlockBadge(`u${matchingUnit.id}`);
+        if (quizType === "comprehensive") {
+          unlockBadge("grand_historian");
+        } else if (quizType === "unit") {
+          // Unlock badge related to unit
+          const matchingUnit = UNITS.find(u => u.id === selectedUnitId);
+          if (matchingUnit) {
+            unlockBadge(`u${matchingUnit.id}`);
+          }
         }
       }
       setSelectedOption(null);
@@ -686,10 +836,109 @@ export default function App() {
         </div>
       </header>
 
+      {/* Real-time Global Navigation Tabs */}
+      <div className="bg-[#121020]/95 border-b border-indigo-950/60 sticky top-[73px] z-30 backdrop-blur-md px-4 shrink-0 transition select-none shadow">
+        <div className="max-w-7xl mx-auto flex items-center justify-between overflow-x-auto no-scrollbar py-3 gap-4">
+          <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto no-scrollbar pb-1 sm:pb-0 scrollbar-none">
+            <button
+              id="nav-dashboard"
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("dashboard");
+                setSelectedUnitId(null);
+                setQuizMode("none");
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                (currentTab === "dashboard" || currentTab === "unit") && quizMode === "none"
+                  ? "bg-amber-800 text-slate-100 shadow-md border border-amber-600/30 scale-102"
+                  : "bg-[#18152c]/65 text-slate-300 hover:bg-[#201c3e]/80 border border-transparent hover:text-slate-100"
+              }`}
+            >
+              <BookOpen className="w-4 h-4 shrink-0 text-amber-500" />
+              <span>المنهج والوحدات 📖</span>
+            </button>
+
+            <button
+              id="nav-quiz-hub"
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("quiz_hub");
+                setQuizMode("none");
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                currentTab === "quiz_hub" && quizMode === "none"
+                  ? "bg-amber-800 text-slate-100 shadow-md border border-amber-600/30 scale-102"
+                  : "bg-[#18152c]/65 text-slate-300 hover:bg-[#201c3e]/80 border border-transparent hover:text-slate-100"
+              }`}
+            >
+              <Gamepad2 className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>مِنَصَّةُ الِاخْتِبَارَاتِ 📝</span>
+            </button>
+
+            <button
+              id="nav-map"
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("map");
+                setQuizMode("none");
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                currentTab === "map" && quizMode === "none"
+                  ? "bg-amber-800 text-slate-100 shadow-md border border-amber-600/30 scale-102"
+                  : "bg-[#18152c]/65 text-slate-300 hover:bg-[#201c3e]/80 border border-transparent hover:text-slate-100"
+              }`}
+            >
+              <Compass className="w-4 h-4 text-teal-400 shrink-0" />
+              <span>خريطة المعرفة 🗺️</span>
+            </button>
+
+            <button
+              id="nav-chat"
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("chat");
+                setQuizMode("none");
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                currentTab === "chat" && quizMode === "none"
+                  ? "bg-amber-800 text-slate-100 shadow-md border border-amber-600/30 scale-102"
+                  : "bg-[#18152c]/65 text-slate-300 hover:bg-[#201c3e]/80 border border-transparent hover:text-slate-100"
+              }`}
+            >
+              <Bot className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>المعلم الذكي 🤖</span>
+            </button>
+
+            <button
+              id="nav-badges"
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("badges");
+                setQuizMode("none");
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                currentTab === "badges" && quizMode === "none"
+                  ? "bg-amber-800 text-slate-100 shadow-md border border-amber-600/30 scale-102"
+                  : "bg-[#18152c]/65 text-slate-300 hover:bg-[#201c3e]/80 border border-transparent hover:text-slate-100"
+              }`}
+            >
+              <Trophy className="w-4 h-4 text-yellow-400 shrink-0" />
+              <span>لوحة الأوسمة 🏆</span>
+            </button>
+          </div>
+
+          <div className="hidden lg:flex items-center gap-2">
+            <span className="text-[10px] text-slate-400 font-bold bg-[#141221] py-1 px-3 rounded-lg border border-indigo-950">
+              رصيد الأسئلة: {QUESTIONS.length} سؤال وبطاقة 📚
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Main Container Wrapper */}
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8 space-y-6">
         {/* TAB 1: DASHBOARD / UNITS GRID */}
-        {currentTab === "dashboard" && (
+        {currentTab === "dashboard" && quizMode === "none" && (
           <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
             {/* Quick Hero Banner */}
             <div className="relative bg-gradient-to-br from-[#1b1236] to-[#2e1d13] rounded-3xl p-6 md:p-10 text-white shadow-xl overflow-hidden border border-indigo-900/50">
@@ -717,6 +966,16 @@ export default function App() {
                   >
                     <Compass className="w-4 h-4" />
                     <span>تصفح خريطة المدن</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handlePlaySound("click");
+                      setCurrentTab("quiz_hub");
+                    }}
+                    className="bg-gradient-to-r from-fuchsia-700 to-fuchsia-800 hover:from-fuchsia-600 hover:to-fuchsia-750 text-slate-100 border border-transparent rounded-xl px-4 py-2 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer h-10 shadow-sm"
+                  >
+                    <Gamepad2 className="w-4 h-4 text-amber-300 animate-pulse" />
+                    <span>منصة الاختبارات 📝</span>
                   </button>
                   <button
                     onClick={() => {
@@ -866,7 +1125,7 @@ export default function App() {
         )}
 
         {/* TAB 2: MAP EXPLORER */}
-        {currentTab === "map" && (
+        {currentTab === "map" && quizMode === "none" && (
           <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
             <button
               onClick={() => {
@@ -883,7 +1142,7 @@ export default function App() {
         )}
 
         {/* TAB 3: SMART CHATBOT */}
-        {currentTab === "chat" && (
+        {currentTab === "chat" && quizMode === "none" && (
           <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
             <button
               onClick={() => {
@@ -900,7 +1159,7 @@ export default function App() {
         )}
 
         {/* TAB 4: BADGES CABINET */}
-        {currentTab === "badges" && (
+        {currentTab === "badges" && quizMode === "none" && (
           <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
             <div className="flex items-center justify-between border-b border-indigo-950/60 pb-4">
               <h2 className="text-2xl font-bold font-serif text-slate-100 flex items-center gap-2">
@@ -958,7 +1217,7 @@ export default function App() {
         )}
 
         {/* TAB 5: LESSON READER & QUIZ TRAY */}
-        {currentTab === "unit" && selectedUnit && (
+        {currentTab === "unit" && selectedUnit && quizMode === "none" && (
           <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
             {/* Unit Cover Header */}
             <div className="bg-gradient-to-br from-[#121020] to-[#1a1122] rounded-3xl p-6 border border-indigo-950 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
@@ -1218,7 +1477,7 @@ export default function App() {
                     {/* card face */}
                     <div className={`absolute inset-0 w-full h-full rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center text-center transition-all duration-300 ${
                       flashcardFlipped
-                        ? "bg-gradient-to-br from-[#1b1236] to-[#2e1d13] text-white border-amber-500/30 shadow-inner"
+                        ? "bg-gradient-to-br from-[#1b1236]/90 to-[#2e1d13]/90 text-white border-amber-500/30 shadow-inner"
                         : "bg-gradient-to-br from-[#121020] to-[#18152c] text-slate-100 border-indigo-950"
                     }`}>
                       <span className="text-[10px] tracking-wider uppercase font-bold text-amber-400 block mb-2">
@@ -1268,14 +1527,364 @@ export default function App() {
                 </div>
               </div>
             )}
-                          {/* CURRICULUM LIVE CHALLENGES: A) MCQ & True-False QUIZ */}
+          </div>
+        )}
+
+        {/* TAB 6: NEW DEDICATED QUIZ HUB PLATFORM */}
+        {currentTab === "quiz_hub" && quizMode === "none" && (
+          <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
+            {/* Section Header */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-indigo-950/60 pb-5">
+              <div className="text-right space-y-1">
+                <h2 className="text-2xl md:text-3xl font-serif font-extrabold text-amber-400 flex items-center gap-2">
+                  <Gamepad2 className="w-8 h-8 text-amber-500 animate-[bounce_5s_infinite]" />
+                  <span>مِنَصَّةُ الِاخْتِبَارَاتِ التَّفَاعُلِيَّةِ</span>
+                </h2>
+                <p className="text-xs md:text-sm text-slate-400 font-sans">
+                  صمّم اختبارك المخصص بتقرير عدد الأسئلة ونطاق الفحص (درس، وحدة، أو كامل المنهج الدراسي) واختبر مقدرتك الفورية!
+                </p>
+              </div>
+              <div className="bg-[#18152c] border border-indigo-950/70 py-2.5 px-4 rounded-2xl flex items-center gap-3.5 shadow">
+                <Trophy className="w-7 h-7 text-yellow-400" />
+                <div className="text-right">
+                  <div className="text-[10px] text-slate-400 font-bold">نقاط المؤرخ الإجمالية</div>
+                  <div className="text-base font-sans font-black text-amber-300">{score} نقطة ⭐</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Configuration Panel */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 font-sans">
+              {/* Left part: Choices - 8 columns */}
+              <div className="lg:col-span-8 space-y-6 text-right">
+                
+                {/* step 1: Select Quiz Scope / Category */}
+                <div className="bg-[#121020]/90 border border-indigo-950/80 rounded-2xl p-6 space-y-4">
+                  <h3 className="text-base font-serif font-bold text-slate-200 flex items-center gap-2 border-b border-indigo-950 pb-2">
+                    <span className="bg-amber-500/10 text-amber-400 w-6 h-6 rounded-lg text-xs flex items-center justify-center font-bold">١</span>
+                    <span>اختر نطاق الأسئلة والاختبار:</span>
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhCategory("comprehensive");
+                      }}
+                      className={`p-4 rounded-xl border text-right transition-all flex flex-col gap-1.5 cursor-pointer ${
+                        qhCategory === "comprehensive"
+                          ? "bg-amber-950/40 border-amber-500 shadow-md ring-1 ring-amber-500/30"
+                          : "bg-[#18152c]/50 border-indigo-950 hover:bg-[#201c3e]/70"
+                      }`}
+                    >
+                      <Book className="w-5 h-5 text-amber-400" />
+                      <span className="font-serif font-bold text-sm text-slate-100">شامل لكتاب المنهج</span>
+                      <span className="text-[10px] text-slate-400 leading-relaxed font-sans">
+                        امتحان شامل ومتكامل على كافة فصول ووحدات الكتاب المدرسي للتحدي الأعظم!
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhCategory("unit");
+                      }}
+                      className={`p-4 rounded-xl border text-right transition-all flex flex-col gap-1.5 cursor-pointer ${
+                        qhCategory === "unit"
+                          ? "bg-amber-950/40 border-amber-500 shadow-md ring-1 ring-amber-500/30"
+                          : "bg-[#18152c]/50 border-indigo-950 hover:bg-[#201c3e]/70"
+                      }`}
+                    >
+                      <Trophy className="w-5 h-5 text-indigo-400" />
+                      <span className="font-serif font-bold text-sm text-slate-100">مستوى الوحدة الدراسية</span>
+                      <span className="text-[10px] text-slate-400 leading-relaxed font-sans">
+                        اختبر معرفتك في وحدة جغرافية وتاريخية كاملة من وحدات المنهج الخمسة.
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhCategory("lesson");
+                      }}
+                      className={`p-4 rounded-xl border text-right transition-all flex flex-col gap-1.5 cursor-pointer ${
+                        qhCategory === "lesson"
+                          ? "bg-amber-950/40 border-amber-500 shadow-md ring-1 ring-amber-500/30"
+                          : "bg-[#18152c]/50 border-indigo-950 hover:bg-[#201c3e]/70"
+                      }`}
+                    >
+                      <FileText className="w-5 h-5 text-emerald-400" />
+                      <span className="font-serif font-bold text-sm text-slate-100">مستوى درس مخصص</span>
+                      <span className="text-[10px] text-slate-400 leading-relaxed font-sans">
+                        اختبر استيعابك الدقيق لدرس تاريخي محدد تزيد به من محصولك الفوري.
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Scope Detail Selectors based on selection */}
+                  {qhCategory === "unit" && (
+                    <div className="bg-[#18152c]/40 border border-indigo-950 rounded-xl p-4 space-y-2 animate-[fadeIn_0.2s_ease-out]">
+                      <label className="text-[11px] text-slate-400 font-bold block">اختر الوحدة المستهدفة:</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {UNITS.map(u => (
+                          <button
+                            key={u.id}
+                            onClick={() => {
+                              handlePlaySound("click");
+                              setQhUnitId(u.id);
+                            }}
+                            className={`text-right p-2.5 rounded-lg border text-xs font-semibold font-serif transition-colors ${
+                              parseInt(qhUnitId as any) === u.id
+                                ? "bg-indigo-950 text-indigo-300 border-indigo-500 font-bold"
+                                : "bg-[#110e1a]/80 text-slate-300 border-[#1c1a30]/65 hover:bg-[#1c1a30]"
+                            }`}
+                          >
+                            {u.id}. {u.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {qhCategory === "lesson" && (
+                    <div className="bg-[#18152c]/40 border border-indigo-950 rounded-xl p-4 space-y-3 animate-[fadeIn_0.2s_ease-out]">
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-slate-400 font-bold block">١. اختر الوحدة أولاً:</label>
+                        <select
+                          value={qhUnitId}
+                          onChange={(e) => {
+                            handlePlaySound("click");
+                            setQhUnitId(parseInt(e.target.value));
+                          }}
+                          className="w-full bg-[#110e1a] text-slate-200 border border-indigo-950/80 rounded-xl p-2.5 text-xs focus:ring-1 focus:ring-amber-500 outline-none font-serif cursor-pointer"
+                        >
+                          {UNITS.map(u => (
+                            <option key={u.id} value={u.id}>الوحدة {u.id}: {u.title}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-slate-400 font-bold block">٢. اختر الدرس المطلوب للفحص البؤري:</label>
+                        <select
+                          value={qhLessonId}
+                          onChange={(e) => {
+                            handlePlaySound("click");
+                            setQhLessonId(e.target.value);
+                          }}
+                          className="w-full bg-[#110e1a] text-slate-200 border border-[#1c1a30]/65 rounded-xl p-2.5 text-xs focus:ring-1 focus:ring-amber-500 outline-none font-serif cursor-pointer"
+                        >
+                          {(UNITS.find(u => u.id === qhUnitId)?.lessons || []).map(l => (
+                            <option key={l.id} value={l.id}>{l.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 2: Choose Size (Length) */}
+                <div className="bg-[#121020]/90 border border-indigo-950/80 rounded-2xl p-6 space-y-4">
+                  <h3 className="text-base font-serif font-bold text-slate-200 flex items-center gap-2 border-b border-indigo-950 pb-2">
+                    <span className="bg-amber-500/10 text-amber-400 w-6 h-6 rounded-lg text-xs flex items-center justify-center font-bold">٢</span>
+                    <span>حدد حجم وطول الاختبار (عدد الأسئلة):</span>
+                  </h3>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[5, 10, 15, 20].map((size) => {
+                      let labelText = "سريع";
+                      if (size === 10) labelText = "قياسي";
+                      if (size === 15) labelText = "شامل";
+                      if (size === 20) labelText = "امتحان التحدي الأقصى!";
+
+                      return (
+                        <button
+                          key={size}
+                          onClick={() => {
+                            handlePlaySound("click");
+                            setQhSize(size);
+                          }}
+                          className={`p-3.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                            qhSize === size
+                              ? "bg-indigo-950 text-indigo-300 border-indigo-500 shadow"
+                              : "bg-[#18152c]/50 border-indigo-950 hover:bg-[#201c3e]/70"
+                          }`}
+                        >
+                          <span className="font-sans font-black text-lg">{size} أسئلة</span>
+                          <span className="text-[10px] text-slate-400 font-serif">{labelText}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Step 3: Choose Challenge Style */}
+                <div className="bg-[#121020]/90 border border-indigo-950/80 rounded-2xl p-6 space-y-4">
+                  <h3 className="text-base font-serif font-bold text-slate-200 flex items-center gap-2 border-b border-indigo-950 pb-2">
+                    <span className="bg-amber-500/10 text-amber-400 w-6 h-6 rounded-lg text-xs flex items-center justify-center font-bold">٣</span>
+                    <span>اختر نمط وطبيعة التحدي:</span>
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhChallengeType("mcq");
+                      }}
+                      className={`p-4 rounded-xl border text-right transition-all flex flex-col gap-1.5 cursor-pointer ${
+                        qhChallengeType === "mcq"
+                          ? "bg-amber-950/40 border-amber-500 shadow-md ring-1 ring-amber-500/30"
+                          : "bg-[#18152c]/50 border-indigo-950 hover:bg-[#201c3e]/70"
+                      }`}
+                    >
+                      <HelpCircle className="w-5 h-5 text-amber-400" />
+                      <span className="font-serif font-bold text-sm text-slate-100">نمط الامتحان المنهجي 📋</span>
+                      <span className="text-[10px] text-slate-400 leading-relaxed font-sans mt-1">
+                        أسئلة متنوعة (اختيار من متعدد وصح وخطأ) مع شروحات تاريخية غنية فورية.
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhChallengeType("speedrun");
+                      }}
+                      className={`p-4 rounded-xl border text-right transition-all flex flex-col gap-1.5 cursor-pointer ${
+                        qhChallengeType === "speedrun"
+                          ? "bg-amber-950/40 border-amber-500 shadow-md ring-1 ring-amber-500/30"
+                          : "bg-[#18152c]/50 border-indigo-950 hover:bg-[#201c3e]/70"
+                      }`}
+                    >
+                      <Clock className="w-5 h-5 text-indigo-400" />
+                      <span className="font-serif font-bold text-sm text-slate-100 font-bold">تحدي السرعة الخاطف ⚡</span>
+                      <span className="text-[10px] text-slate-400 leading-relaxed font-sans mt-1">
+                        أسئلة صح وخطأ متسارعة مع عد تنازلي ضاغط من ١٥ ثانية لرفع حماستك وتركيزك!
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhChallengeType("match");
+                      }}
+                      className={`p-4 rounded-xl border text-right transition-all flex flex-col gap-1.5 cursor-pointer ${
+                        qhChallengeType === "match"
+                          ? "bg-amber-950/40 border-amber-500 shadow-md ring-1 ring-amber-500/30"
+                          : "bg-[#18152c]/50 border-indigo-950 hover:bg-[#201c3e]/70"
+                      }`}
+                    >
+                      <Award className="w-5 h-5 text-emerald-400" />
+                      <span className="font-serif font-bold text-sm text-slate-100 font-bold">لعبة التوصيل الذكي 🧩</span>
+                      <span className="text-[10px] text-slate-400 leading-relaxed font-sans mt-1">
+                        قم بربط كل شخصية أو مدينة أو تاريخ بعبارتها المقابلة بطريقة مسلية وتدريبية!
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Right Column: Summaries & Button - 4 columns */}
+              <div className="lg:col-span-4 space-y-6">
+                {/* Information summary box */}
+                <div className="bg-[#121020]/90 border border-indigo-950 rounded-2xl p-6 text-right space-y-4">
+                  <h4 className="text-sm font-serif font-bold text-amber-400 border-b border-indigo-950 pb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                    <span>ملخص إعدادات التحدي</span>
+                  </h4>
+                  
+                  <div className="space-y-3.5 text-xs font-serif leading-relaxed">
+                    <div className="flex justify-between items-center border-b border-indigo-950/30 pb-2">
+                      <span className="text-slate-400">النطاق الدراسي:</span>
+                      <span className="text-slate-100 font-bold">
+                        {qhCategory === "comprehensive" ? "الكتاب المنهجي كاملاً ✨" : qhCategory === "unit" ? `الوحدة ${qhUnitId} 🏆` : "درس مخصص 📝"}
+                      </span>
+                    </div>
+                    {qhCategory === "lesson" && (
+                      <div className="flex justify-between items-start border-b border-indigo-950/30 pb-2 gap-2 text-left">
+                        <span className="text-slate-400 text-right shrink-0">الدرس المختار:</span>
+                        <span className="text-indigo-300 font-bold leading-snug">
+                          {UNITS.find(u => u.id === qhUnitId)?.lessons.find(l => l.id === qhLessonId)?.title || ""}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center border-b border-indigo-950/30 pb-2">
+                      <span className="text-slate-400">طول الاختبار:</span>
+                      <span className="text-amber-500 font-bold">{qhSize} سؤالاً تاريخياً</span>
+                    </div>
+                    <div className="flex justify-between items-center border-b border-indigo-950/30 pb-2">
+                      <span className="text-slate-400">طريقة التحدي:</span>
+                      <span className="text-slate-100 font-bold">
+                        {qhChallengeType === "mcq" ? "النمط المنهجي (شامل)" : qhChallengeType === "speedrun" ? "صح وخطأ متسارع سريع" : "مطابقة وتوصيل المفاهيم"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">مجموع نقاط التحدي:</span>
+                      <span className="text-emerald-400 font-bold font-sans">+{qhSize * 10} نقاط معرفة ⭐</span>
+                    </div>
+                  </div>
+
+                  {/* Ready to go button */}
+                  <button
+                    onClick={() => {
+                      const rawLesson = qhCategory === "lesson" 
+                        ? UNITS.find(u => u.id === qhUnitId)?.lessons.find(l => l.id === qhLessonId)
+                        : undefined;
+                      
+                      startQuizHubCustom({
+                        type: qhCategory,
+                        unitId: qhUnitId,
+                        lessonId: qhLessonId,
+                        lessonTitle: rawLesson ? rawLesson.title : undefined,
+                        questionCount: qhSize,
+                        challengeType: qhChallengeType
+                      });
+                    }}
+                    className="w-full py-4 text-center text-sm font-black font-serif bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 border border-transparent text-white rounded-xl shadow-lg hover:scale-[1.01] active:scale-[0.99] transition duration-200 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Play className="w-4 h-4 fill-current text-white animate-pulse" />
+                    <span>ابدأ التحدي والامتحان الآن 🚀</span>
+                  </button>
+                </div>
+
+                {/* Fun advice card */}
+                <div className="bg-[#110e1a]/80 border border-indigo-950 p-5 rounded-2xl text-right text-xs">
+                  <p className="text-amber-400 font-serif font-bold text-center mb-2.5">💡 إرشادات المؤرخ الصغير</p>
+                  <p className="text-slate-300 leading-relaxed font-serif">
+                    جميع أسئلتنا مشتقة من المناهج السودانية المعتمدة لمدارس مرحلة الأساس والابتدائي، وصممت لتنمي تفكيرك وتربطك بالعمق الوطني السوداني والرموز القيادية التاريخية!
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {quizMode !== "none" && (
+          <div className="flex items-center justify-between border-b border-indigo-950/60 pb-3 mb-6 animate-[fadeIn_0.3s_ease-out]">
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setQuizMode("none");
+              }}
+              className="bg-[#1b1930] hover:bg-[#252244] text-slate-100 text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-indigo-950/75 cursor-pointer shadow-sm"
+            >
+              <ArrowRight className="w-4 h-4 transform rotate-180 text-amber-500" />
+              <span>الخروج من الاختبار والعودة ↩</span>
+            </button>
+            <div className="text-left font-serif text-[11px] text-amber-500 font-bold bg-[#141221] py-1.5 px-4 rounded-full border border-indigo-950/80 shadow-inner">
+              {quizTitle || "اختبار تفاعلي"}
+            </div>
+          </div>
+        )}
+
+            {/* CURRICULUM LIVE CHALLENGES: A) MCQ & True-False QUIZ */}
             {quizMode === "curriculum" && (
               <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6">
                 {quizIdx < quizQuestions.length ? (
                   <div className="space-y-6">
                     <div className="flex items-center justify-between border-b border-indigo-950 pb-4">
                       <div>
-                        <h4 className="text-lg font-bold font-serif text-slate-100">الاختبار الشامل للوحدة</h4>
+                        <h4 className="text-lg font-bold font-serif text-slate-100">{quizTitle || "اختبار المنهج"}</h4>
                         <p className="text-xs text-slate-400 mt-1 font-sans">السؤال {quizIdx + 1} من {quizQuestions.length}</p>
                       </div>
                       <span className="bg-amber-900 text-white font-sans text-xs px-2.5 py-1 rounded border border-amber-600/30">المرحلة {quizIdx + 1}</span>
@@ -1298,7 +1907,7 @@ export default function App() {
                           } else if (isSelected) {
                             optStyle = "bg-red-950/80 border-red-500 text-red-350";
                           } else {
-                            optStyle = "bg-[#121020] border-indigo-950/20 text-slate-500 opacity-40 cursor-not-allowed";
+                            optStyle = "bg-[#121020] border-indigo-950/20 text-slate-400/80 opacity-70 cursor-not-allowed";
                           }
                         }
 
@@ -1342,7 +1951,13 @@ export default function App() {
                   <div className="text-center p-8 space-y-6">
                     <Trophy className="w-16 h-16 text-amber-400 mx-auto animate-bounce fill-amber-500/20" />
                     <div className="space-y-2">
-                      <h3 className="text-2xl font-bold font-serif text-slate-100">أتممت الاختبار النهائي بنجاح! 🎉</h3>
+                      <h3 className="text-2xl font-bold font-serif text-slate-100">
+                        {quizType === "comprehensive"
+                          ? "أتممت الامتحان الشامل والنهائي لكامل كتاب التاريخ بنجاح! 🎓"
+                          : quizType === "lesson"
+                          ? "أتممت اختبار الدرس المنهجي بنجاح! 📝"
+                          : "أتممت الاختبار النهائي للوحدة بنجاح! 🎉"}
+                      </h3>
                       <p className="text-xs text-slate-400">لقد أحرزت {quizCorrectAnswers} إجابات صحيحة من أصل {quizQuestions.length}</p>
                     </div>
 
@@ -1350,18 +1965,22 @@ export default function App() {
                     <div className="inline-flex items-center gap-2.5 bg-[#1b1226] px-6 py-3 rounded-2xl border border-indigo-950/80">
                       <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
                       <span className="text-sm font-serif font-bold text-amber-300 text-right">
-                        لقد نلت +{quizCorrectAnswers * 10} نقاط معرفة إضافية تضاف لرصيدك!
+                        لقد نلت +{quizCorrectAnswers * (quizType === "comprehensive" ? 15 : 10)} نقاط معرفة إضافية تضاف لرصيدك!
                       </span>
                     </div>
 
                     {/* Badge unlock reward */}
                     {(((quizCorrectAnswers / quizQuestions.length) * 100) >= 80) ? (
                       <div className="bg-[#11241a] text-emerald-400 p-4 rounded-xl border border-[#1b3d2b] text-sm font-semibold max-w-md mx-auto leading-relaxed">
-                        🎖️ رائع! نظراً لتحقيقك نسبة فوز تتجاوز 80%، تم فتح وسام الوحدة الخاص بك وإضافته لملفك الشخصي بنجاح!
+                        {quizType === "comprehensive"
+                          ? "🎖️ رائع! نظراً لتحقيقك نسبة نجاح تتجاوز 80% في الامتحان الشامل، تم تزيين ملفك الشخصي بوسام 'المؤرخ العبقري الشامل' المرموق بنجاح!"
+                          : quizType === "lesson"
+                          ? "🎖️ رائع! لقد استوعبت هذا الدرس المنهجي بامتياز وحققت نسبة نجاح ممتازة تفوق 80% في الأسئلة!"
+                          : "🎖️ رائع! نظراً لتحقيقك نسبة فوز تتجاوز 80%، تم فتح وسام الوحدة الخاص بك وإضافته لملفك الشخصي بنجاح!"}
                       </div>
                     ) : (
                       <div className="bg-[#241a11] text-amber-400 p-4 rounded-xl border border-[#3b291a] text-xs font-medium max-w-md mx-auto leading-relaxed">
-                        📖 لم تحقق 80% للحصول على الوسام هذه المرة، لكن واصل مطالعة الدروس والخط الزمني وتحدّ مرة أخرى بثقة!
+                        📖 لم تحقق 80% للحصول على الجائزة الكبرى هذه المرة، لكن واصل مطالعة الدروس والخطوط الزمنية وتحدّ مرة أخرى بثقة!
                       </div>
                     )}
 
@@ -1509,7 +2128,7 @@ export default function App() {
                       if (isMatched) {
                         boxStyle = "bg-emerald-950/40 border-emerald-800/60 text-emerald-300 opacity-50 pointer-events-none";
                       } else if (isDisabled) {
-                        boxStyle = "bg-[#121020] border-indigo-950/10 text-slate-500 opacity-40 cursor-not-allowed";
+                        boxStyle = "bg-[#121020] border-indigo-950/20 text-slate-400/80 opacity-70 cursor-not-allowed";
                       } else if (isWrong) {
                         boxStyle = "bg-red-950 border-red-500 text-red-200 scale-[1.02] animate-shake";
                       }
@@ -1552,8 +2171,6 @@ export default function App() {
                 )}
               </div>
             )}
-          </div>
-        )}
       </main>
 
       {/* Visual bottom parchment style design separator */}

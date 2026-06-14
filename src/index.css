@@ -17,6 +17,35 @@
   --border-primary: rgba(49, 46, 129, 0.6);
 }
 
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+}
+
+input, select, textarea, button {
+  color: inherit;
+}
+
+option {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-item);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-primary);
+}
+
 .light-theme {
   --bg-main: #f1f5f9;  /* Soft slate background */
   --bg-card: #ffffff;  /* Premium pure-white card background */
@@ -123,6 +152,23 @@
 }
 .light-theme .bg-\[\#131126\]\/30 {
   background-color: rgba(241, 245, 249, 0.5) !important;
+}
+
+/* Chat specific light theme background and border overrides */
+.light-theme .bg-\[\#0f0d1c\] {
+  background-color: var(--bg-main) !important;
+}
+.light-theme .bg-\[\#16132b\] {
+  background-color: var(--bg-item) !important;
+}
+.light-theme .bg-\[\#1a1634\] {
+  background-color: var(--bg-input) !important;
+}
+.light-theme .border-\[\#1b1736\] {
+  border-color: var(--border-primary) !important;
+}
+.light-theme .border-\[\#1d193a\] {
+  border-color: var(--border-primary) !important;
 }
 
 /* 2. Hover states overrides */

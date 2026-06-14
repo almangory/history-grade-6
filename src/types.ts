@@ -13,6 +13,7 @@ export enum QuestionType {
 export interface Question {
   id: string;
   unitId: number;
+  lessonId?: string; // Optional link to a specific lesson ID
   type: QuestionType;
   text: string;
   options?: string[]; // Used for MCQ
