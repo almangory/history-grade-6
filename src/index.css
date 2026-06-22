@@ -290,3 +290,112 @@ option {
   border: none !important;
 }
 
+/* Premium A4 Print Overrides */
+@media print {
+  /* Hide all interactive, web-only layout parts */
+  header, footer, nav, button, select, input, .no-print, .bg-gradient-to-r, #nav-bar, .bg-[#121020]/95 {
+    display: none !important;
+  }
+  
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-family: "Amiri", Georgia, serif !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Force A4 print sizes to take up full paper sheets and separate per page index */
+  div[id^="printable-page-"] {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    page-break-after: always !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    display: block !important;
+  }
+}
+
+/* Advanced Day Time (Light-theme) layout adjustments */
+.light-theme {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.light-theme h1,
+.light-theme h2,
+.light-theme h3,
+.light-theme h4,
+.light-theme h5 {
+  color: #0f172a !important;
+}
+
+.light-theme h2 span,
+.light-theme h3 span {
+  color: #0f172a !important;
+}
+
+/* Ensure secondary slate texts are fully visible and clear */
+.light-theme .text-slate-200,
+.light-theme .text-slate-300,
+.light-theme .text-slate-400,
+.light-theme .text-slate-150 {
+  color: #334155 !important; /* dark slate-700 */
+}
+
+/* Specific button styles under light theme */
+.light-theme .bg-amber-800 {
+  background-color: #d97706 !important; /* warm gold */
+  color: #ffffff !important;
+}
+
+.light-theme .bg-[#121020],
+.light-theme .bg-[#121020]/95 {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Fix shadow contrasts for light mode */
+.light-theme .shadow, .light-theme .shadow-md {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05) !important;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) {
+  background-color: #6d6b79 !important;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > button#nav-badges:nth-of-type(6) > span:nth-of-type(1) {
+  color: #ffffff !important;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > button#nav-chat:nth-of-type(5) > span:nth-of-type(1) {
+  color: #e8edf3 !important;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > button#nav-worksheets:nth-of-type(3) > span:nth-of-type(1) {
+  color: #e8edf3 !important;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > button#nav-quiz-hub:nth-of-type(2) > span:nth-of-type(1) {
+  color: #dee5ef !important;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > button#nav-dashboard:nth-of-type(1) > span:nth-of-type(1) {
+  color: #dfe4eb !important;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1) > div#map-explorer-container:nth-of-type(1) > div:nth-of-type(2) > button:nth-of-type(1) > span:nth-of-type(1) {
+  color: #e8edf3 !important;
+}
+
+
+
+

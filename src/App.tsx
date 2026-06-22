@@ -10,6 +10,7 @@ import { playSound } from "./components/SoundEffects";
 import { SVGIllustration } from "./components/SVGIllustrations";
 import { MapExplorer } from "./components/MapExplorer";
 import { AIChatBot } from "./components/AIChatBot";
+import { WorksheetGenerator } from "./components/WorksheetGenerator";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, signInWithGoogle, logoutUser, db } from "./firebase";
@@ -68,6 +69,22 @@ export default function App() {
     const saved = localStorage.getItem("sub_historian_badges");
     return saved ? JSON.parse(saved) : [];
   });
+  const [favoriteLessons, setFavoriteLessons] = useState<string[]>(() => {
+    const saved = localStorage.getItem("sub_historian_favorites");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const onToggleFavoriteLesson = (lessonId: string) => {
+    handlePlaySound("click");
+    setFavoriteLessons(prev => {
+      const isFav = prev.includes(lessonId);
+      if (isFav) {
+        return prev.filter(id => id !== lessonId);
+      } else {
+        return [...prev, lessonId];
+      }
+    });
+  };
 
   // 1. Google Sign-In & Auth State Listener
   useEffect(() => {
@@ -140,7 +157,7 @@ export default function App() {
   }, [userName, userAvatar, score, unlockedBadges, currentUser]);
 
   // App Navigation States
-  const [currentTab, setCurrentTab] = useState<"dashboard" | "unit" | "map" | "chat" | "quiz_hub" | "badges">("dashboard");
+  const [currentTab, setCurrentTab] = useState<"dashboard" | "unit" | "map" | "chat" | "quiz_hub" | "badges" | "worksheets">("dashboard");
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   
   // Lesson Inner Navigation States
@@ -197,7 +214,8 @@ export default function App() {
     localStorage.setItem("sub_historian_score", score.toString());
     localStorage.setItem("sub_historian_badges", JSON.stringify(unlockedBadges));
     localStorage.setItem("sub_historian_theme", theme);
-  }, [userName, userAvatar, score, unlockedBadges, theme]);
+    localStorage.setItem("sub_historian_favorites", JSON.stringify(favoriteLessons));
+  }, [userName, userAvatar, score, unlockedBadges, theme, favoriteLessons]);
 
   // Achievement unlock triggers
   const unlockBadge = (badgeId: string) => {
@@ -876,6 +894,23 @@ export default function App() {
             </button>
 
             <button
+              id="nav-worksheets"
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("worksheets");
+                setQuizMode("none");
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                currentTab === "worksheets" && quizMode === "none"
+                  ? "bg-amber-800 text-slate-100 shadow-md border border-amber-600/30 scale-102"
+                  : "bg-[#18152c]/65 text-slate-300 hover:bg-[#201c3e]/80 border border-transparent hover:text-slate-100"
+              }`}
+            >
+              <FileText className="w-4 h-4 text-sky-400 shrink-0" />
+              <span>أَوْرَاقُ العَمَلِ وَالطبَاعَة 🖨️</span>
+            </button>
+
+            <button
               id="nav-map"
               onClick={() => {
                 handlePlaySound("click");
@@ -995,6 +1030,43 @@ export default function App() {
                 <Book className="w-full h-full" />
               </div>
             </div>
+
+            {/* FAVORITE LESSONS QUICK ACCESS */}
+            {favoriteLessons.length > 0 && (
+              <div className="bg-[#15122b]/40 rounded-2xl border border-indigo-950/60 p-5 space-y-3">
+                <h4 className="text-sm font-sans font-extrabold text-amber-400 flex items-center gap-1.5 border-b border-indigo-950/30 pb-2">
+                  <Heart className="w-4 h-4 text-red-500 fill-red-500 shrink-0" />
+                  <span>فهرس الدروس والوحدات المفضلة لديك ({favoriteLessons.length}) ⭐</span>
+                </h4>
+                <div className="flex flex-wrap gap-2.5">
+                  {UNITS.flatMap(u => u.lessons)
+                    .filter(l => favoriteLessons.includes(l.id))
+                    .map(l => {
+                      const unit = UNITS.find(u => u.lessons.some(les => les.id === l.id));
+                      return (
+                        <button
+                          key={l.id}
+                          onClick={() => {
+                            if (unit) {
+                              handlePlaySound("click");
+                              setSelectedUnitId(unit.id);
+                              const idx = unit.lessons.findIndex(les => les.id === l.id);
+                              setCurrentLessonIdx(idx >= 0 ? idx : 0);
+                              setCurrentTab("unit");
+                            }
+                          }}
+                          className="bg-[#18152c] hover:bg-[#201c3e] border border-indigo-950 px-3 py-2 rounded-xl text-xs text-slate-200 transition flex items-center gap-1.5 cursor-pointer max-w-xs truncate"
+                        >
+                          <span className="text-[10px] bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded leading-none">
+                            الوحدة {unit?.id || "6"}
+                          </span>
+                          <span className="font-serif font-semibold truncate text-[11px]">{l.title}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
 
             {/* Lessons Curriculum Units Section */}
             <div className="space-y-4">
@@ -1216,6 +1288,21 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB WORKSHEETS: WORKSHEETS GENERATOR & PRINT OUTS */}
+        {currentTab === "worksheets" && quizMode === "none" && (
+          <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
+            <WorksheetGenerator
+              units={UNITS}
+              questions={QUESTIONS}
+              favoriteLessons={favoriteLessons}
+              onToggleFavoriteLesson={onToggleFavoriteLesson}
+              onPlaySound={handlePlaySound}
+              score={score}
+              setScore={setScore}
+            />
+          </div>
+        )}
+
         {/* TAB 5: LESSON READER & QUIZ TRAY */}
         {currentTab === "unit" && selectedUnit && quizMode === "none" && (
           <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
@@ -1321,13 +1408,14 @@ export default function App() {
                         handlePlaySound("click");
                         setCurrentLessonIdx(idx);
                       }}
-                      className={`w-full text-right p-3 rounded-lg border text-sm transition-all duration-200 block cursor-pointer ${
+                      className={`w-full text-right p-3 rounded-lg border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
                         currentLessonIdx === idx
                           ? "bg-amber-800 text-white border-amber-600 font-serif font-bold shadow"
                           : "bg-[#18152c] hover:bg-[#201c3e] text-slate-200 border-indigo-950/60"
                       }`}
                     >
-                      {idx + 1}. {less.title}
+                      <span className="truncate">{idx + 1}. {less.title}</span>
+                      {favoriteLessons.includes(less.id) && <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500 shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -1335,9 +1423,25 @@ export default function App() {
                 <div className="lg:col-span-2 space-y-6">
                   {/* Current Selected Lesson Details */}
                   <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6">
-                    <div className="border-b border-indigo-950 pb-4">
-                      <span className="text-amber-500 text-xs font-bold uppercase block tracking-wider font-sans">الفصل {currentLessonIdx + 1}</span>
-                      <h3 className="text-2xl font-bold font-serif text-slate-100 mt-1">{selectedUnit.lessons[currentLessonIdx].title}</h3>
+                    <div className="border-b border-indigo-950 pb-4 flex items-center justify-between">
+                      <div>
+                        <span className="text-amber-500 text-xs font-bold uppercase block tracking-wider font-sans">الفصل {currentLessonIdx + 1}</span>
+                        <h3 className="text-2xl font-bold font-serif text-slate-100 mt-1">{selectedUnit.lessons[currentLessonIdx].title}</h3>
+                      </div>
+                      <button
+                        onClick={() => {
+                          onToggleFavoriteLesson(selectedUnit.lessons[currentLessonIdx].id);
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                          favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id)
+                            ? "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20"
+                            : "bg-[#18152c]/50 border-indigo-950/50 text-slate-400 hover:text-slate-200"
+                        }`}
+                        title={favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "إزالة من المفضلة" : "إضافة للمفضلة"}
+                      >
+                        <Heart className={`w-3.5 h-3.5 ${favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "fill-red-500 text-red-500" : ""}`} />
+                        <span>{favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "في المفضلة ❤️" : "تفضيل المادة 🤍"}</span>
+                      </button>
                     </div>
 
                     {/* Integrated custom synthesized SVG vector illustrations describing events */}
