@@ -46,7 +46,7 @@ import {
   Moon,
   Play
 } from "lucide-react";
-import { Pause, Settings, Trash2, Image, Video, Radio, Volume1 } from "lucide-react";
+import { Pause, Settings, Trash2, Image, Video, Radio, Volume1, X, Maximize2, Minimize2 } from "lucide-react";
 
 export default function App() {
   // Firebase Auth states
@@ -166,6 +166,9 @@ export default function App() {
   // Lesson Inner Navigation States
   const [lessonActiveSubTab, setLessonActiveSubTab] = useState<"lessons" | "timeline" | "flashcards">("lessons");
   const [currentLessonIdx, setCurrentLessonIdx] = useState(0);
+  const [bookPageIndex, setBookPageIndex] = useState(0); // For paginating lesson parts (0 to 3)
+  const [isReadingMode, setIsReadingMode] = useState(false);
+  const [isTOCExpanded, setIsTOCExpanded] = useState(false);
   const [timelineIndex, setTimelineIndex] = useState(0);
   const [flashcardIdx, setFlashcardIdx] = useState(0);
   const [flashcardFlipped, setFlashcardFlipped] = useState(false);
@@ -231,6 +234,7 @@ export default function App() {
 
   useEffect(() => {
     stopSpeaking();
+    setBookPageIndex(0);
   }, [currentLessonIdx, selectedUnitId, currentTab, lessonActiveSubTab]);
 
   const pauseSpeaking = () => {
@@ -1582,7 +1586,8 @@ export default function App() {
         {currentTab === "unit" && selectedUnit && quizMode === "none" && (
           <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
             {/* Unit Cover Header */}
-            <div className="bg-gradient-to-br from-[#121020] to-[#1a1122] rounded-3xl p-6 border border-indigo-950 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+            {!isReadingMode && (
+              <div className="bg-gradient-to-br from-[#121020] to-[#1a1122] rounded-3xl p-6 border border-indigo-950 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
               <div className="absolute inset-5 border border-slate-800/20 rounded-2xl pointer-events-none"></div>
 
               <div className="space-y-3 relative text-right flex-1 z-10">
@@ -1670,372 +1675,681 @@ export default function App() {
                 )}
               </div>
             </div>
+            )}
 
             {/* CURRICULUM READING SUBTAB */}
             {quizMode === "none" && lessonActiveSubTab === "lessons" && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans">
-                <div className="bg-[#121020] border border-indigo-950 rounded-xl p-4 flex flex-col gap-2 h-fit">
-                  <span className="text-[10px] text-slate-400 font-bold tracking-wider pr-1 block">قائمة فصول الوحدة:</span>
-                  {selectedUnit.lessons.map((less, idx) => (
-                    <button
-                      key={less.id}
-                      onClick={() => {
-                        handlePlaySound("click");
-                        setCurrentLessonIdx(idx);
-                      }}
-                      className={`w-full text-right p-3 rounded-lg border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
-                        currentLessonIdx === idx
-                          ? "bg-amber-800 text-white border-amber-600 font-serif font-bold shadow"
-                          : "bg-[#18152c] hover:bg-[#201c3e] text-slate-200 border-indigo-950/60"
-                      }`}
-                    >
-                      <span className="truncate">{idx + 1}. {less.title}</span>
-                      {favoriteLessons.includes(less.id) && <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500 shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="lg:col-span-2 space-y-6">
-                  {/* Current Selected Lesson Details - Real Book with Page Flipping features */}
-                  <div className="relative bg-[#FAF6EE] text-[#2c221a] rounded-3xl border-4 border-[#3e2e21] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col pt-3 pb-6 md:pb-8 ring-8 ring-amber-950/20">
-                    
-                    {/* Page flipper transition frame */}
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={currentLessonIdx}
-                        initial={{ opacity: 0, rotateY: 10, scale: 0.98, transformOrigin: "right center" }}
-                        animate={{ opacity: 1, rotateY: 0, scale: 1 }}
-                        exit={{ opacity: 0, rotateY: -10, scale: 0.98, transformOrigin: "left center" }}
-                        transition={{ duration: 0.4, ease: "easeInOut" }}
-                        className="grid grid-cols-1 md:grid-cols-2 relative h-full"
+                {!isReadingMode && (
+                  <div className="bg-[#121020] border border-indigo-950 rounded-xl p-4 flex flex-col gap-2 h-fit animate-[fadeIn_0.3s_ease]">
+                    <span className="text-[10px] text-slate-400 font-bold tracking-wider pr-1 block">قائمة فصول الوحدة:</span>
+                    {selectedUnit.lessons.map((less, idx) => (
+                      <button
+                        key={less.id}
+                        onClick={() => {
+                          handlePlaySound("click");
+                          setCurrentLessonIdx(idx);
+                        }}
+                        className={`w-full text-right p-3 rounded-lg border text-sm transition-all duration-200 cursor-pointer flex items-center justify-between ${
+                          currentLessonIdx === idx
+                            ? "bg-amber-800 text-white border-amber-600 font-serif font-bold shadow"
+                            : "bg-[#18152c] hover:bg-[#201c3e] text-slate-200 border-indigo-950/60"
+                        }`}
                       >
-                        {/* Realistic book binding center spine and inner shadows */}
-                        <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -ml-[2px] w-[4px] bg-gradient-to-r from-black/15 via-[#423325]/30 to-black/15 shadow-xl z-20 pointer-events-none"></div>
-                        <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -ml-8 w-16 bg-gradient-to-r from-transparent via-black/[0.04] to-transparent pointer-events-none z-10"></div>
+                        <span className="truncate">{idx + 1}. {less.title}</span>
+                        {favoriteLessons.includes(less.id) && <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-                        {/* ==================== RIGHT PAGE (Book Right Cover & Metadata & Audio Reader) ==================== */}
-                        <div className="md:border-l md:border-[#ebdcb4] p-6 md:p-8 flex flex-col justify-between space-y-6 relative">
-                          {/* Page Bookmark Tag */}
-                          <div className="absolute top-0 right-8 bg-[#3e2e21] text-[#FAF6EE] text-[9px] px-2 py-1 rounded-b-md shadow font-bold tracking-wider select-none">
-                            التاريخ المنهجي 🇸🇩
-                          </div>
+                <div className={`${isReadingMode ? "lg:col-span-3 max-w-4xl mx-auto w-full" : "lg:col-span-2"} space-y-6 transition-all duration-300`}>
+                  {/* Current Selected Lesson Details - Real Book with Page Flipping features */}
+                  {(() => {
+                    const activeLesson = selectedUnit.lessons[currentLessonIdx];
+                    const firstPageParagraphs = activeLesson.content.slice(0, 2);
+                    const secondPageParagraphs = activeLesson.content.slice(2);
+                    
+                    const isWide = typeof window !== "undefined" && window.innerWidth >= 768;
+                    const currentSpread = Math.floor(bookPageIndex / 2);
+                    
+                    const hasPrev = currentLessonIdx > 0 || (isWide ? currentSpread > 0 : bookPageIndex > 0);
+                    const hasNext = currentLessonIdx < selectedUnit.lessons.length - 1 || (isWide ? currentSpread < 1 : bookPageIndex < 3);
+                    
+                    const handleNextPage = () => {
+                      handlePlaySound("levelup");
+                      if (isWide) {
+                        if (currentSpread === 0) {
+                          setBookPageIndex(2);
+                        } else {
+                          if (currentLessonIdx < selectedUnit.lessons.length - 1) {
+                            setCurrentLessonIdx(prev => prev + 1);
+                            setBookPageIndex(0);
+                          }
+                        }
+                      } else {
+                        if (bookPageIndex < 3) {
+                          setBookPageIndex(prev => prev + 1);
+                        } else {
+                          if (currentLessonIdx < selectedUnit.lessons.length - 1) {
+                            setCurrentLessonIdx(prev => prev + 1);
+                            setBookPageIndex(0);
+                          }
+                        }
+                      }
+                    };
 
-                          <div className="space-y-5">
-                            {/* Page Header */}
-                            <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
-                              <span className="text-[10px] font-bold text-[#8a7250] tracking-wider font-sans select-none">المنهج السوداني المعتمد 📖</span>
-                              <span className="text-[10px] font-bold text-[#8a7250] select-none">صفحة {currentLessonIdx * 2 + 1}</span>
-                            </div>
+                    const handlePrevPage = () => {
+                      handlePlaySound("levelup");
+                      if (isWide) {
+                        if (currentSpread === 1) {
+                          setBookPageIndex(0);
+                        } else {
+                          if (currentLessonIdx > 0) {
+                            setCurrentLessonIdx(prev => prev - 1);
+                            setBookPageIndex(2);
+                          }
+                        }
+                      } else {
+                        if (bookPageIndex > 0) {
+                          setBookPageIndex(prev => prev - 1);
+                        } else {
+                          if (currentLessonIdx > 0) {
+                            setCurrentLessonIdx(prev => prev - 1);
+                            setBookPageIndex(3);
+                          }
+                        }
+                      }
+                    };
 
-                            {/* Lesson Title Section */}
-                            <div className="space-y-2">
-                              <span className="text-amber-700 text-xs font-bold block select-none">الفصل {currentLessonIdx + 1}</span>
-                              <h3 className="text-xl md:text-2xl font-bold font-serif text-[#1e150b] tracking-tight leading-snug">{selectedUnit.lessons[currentLessonIdx].title}</h3>
-                            </div>
-
-                            {/* Custom media or illustrative elements */}
-                            <div className="space-y-2">
-                              {renderLessonMedia(selectedUnit.lessons[currentLessonIdx].id, selectedUnit.lessons[currentLessonIdx].illustration)}
-                              
-                              <div className="flex items-center justify-between">
-                                <button
-                                  onClick={() => handleStartEditingMedia(selectedUnit.lessons[currentLessonIdx].id)}
-                                  className="text-[10px] text-amber-900 font-bold hover:text-amber-700 transition flex items-center gap-1 bg-[#eae0bf]/50 px-2 py-1 rounded-lg border border-[#e6daae] cursor-pointer"
-                                >
-                                  <Settings className="w-3 h-3 text-[#3e2e21]" />
-                                  <span>{customMedia[selectedUnit.lessons[currentLessonIdx].id] ? "تعديل رابط الصورة المخصصة 🎨" : "إضافة صورة متحركة أو فيديو أو رابط درايف لهذا الدرس 🔗"}</span>
-                                </button>
-                                {customMedia[selectedUnit.lessons[currentLessonIdx].id] && (
-                                  <button
-                                    onClick={() => handleResetCustomMedia(selectedUnit.lessons[currentLessonIdx].id)}
-                                    className="text-[10px] text-red-700 hover:text-red-600 font-bold flex items-center gap-0.5 cursor-pointer"
-                                    title="استعادة الصورة الأصلية"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                    <span>حذف التخصيص 🚫</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              {isEditingMedia && (
-                                <div className="bg-[#f0e8cb] border border-[#ebdcb4] p-3 rounded-xl space-y-3 font-sans text-right animate-[fadeIn_0.3s_ease]">
-                                  <div className="space-y-0.5">
-                                    <h5 className="text-[11px] font-bold text-amber-950">تخصيص وسائط الدرس 🎨</h5>
-                                    <p className="text-[9px] text-[#5e4f3c]">أي رابط صورة مباشرة، صورة متحركة GIF، فيديو، رابط يوتيوب أو Google Drive (يتم حفظه تلقائياً لنمط الإطار المستديم).</p>
-                                  </div>
-
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] text-amber-950 block select-none">رابط الوسائط (URL):</label>
-                                    <input
-                                      type="text"
-                                      value={mediaUrlInput}
-                                      onChange={(e) => setMediaUrlInput(e.target.value)}
-                                      placeholder="https://example.com/image.gif أو رابط قوقل درايف..."
-                                      dir="ltr"
-                                      className="w-full text-[10px] p-2 rounded-lg bg-[#FAF6EE] border border-[#e6daae] text-slate-900 placeholder-[#9c9172] focus:outline-none focus:border-amber-600 text-left"
-                                    />
-                                  </div>
-
-                                  <div className="grid grid-cols-3 gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => setMediaTypeInput("image")}
-                                      className={`px-2 py-1 rounded text-[9px] transition border cursor-pointer ${mediaTypeInput === "image" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
-                                    >
-                                      صورة / GIF ثابت
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setMediaTypeInput("video")}
-                                      className={`px-2 py-1 rounded-[9px] text-[9px] transition border cursor-pointer ${mediaTypeInput === "video" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
-                                    >
-                                      فيديو مباشر / يوتيوب
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setMediaTypeInput("drive")}
-                                      className={`px-2 py-1 rounded-[9px] text-[9px] transition border cursor-pointer ${mediaTypeInput === "drive" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
-                                    >
-                                      مستند قوقل درايف
-                                    </button>
-                                  </div>
-
-                                  <div className="space-y-1 pt-0.5">
-                                    <label className="text-[10px] text-amber-950 font-bold block select-none text-right">كلمة المرور لتأكيد حفظ وحماية التخصيص 🔒:</label>
-                                    <input
-                                      type="password"
-                                      value={mediaPasswordInput}
-                                      onChange={(e) => setMediaPasswordInput(e.target.value)}
-                                      placeholder="أدخل كلمة المرور السرية (المطلوبة للحفظ)..."
-                                      className="w-full text-xs p-2 rounded-lg bg-[#FAF6EE] border border-[#e6daae] text-black placeholder-slate-400 focus:outline-none focus:border-amber-600 text-center outline-none"
-                                    />
-                                    {mediaPasswordError && (
-                                      <p className="text-[9px] text-red-700 font-bold text-center">{mediaPasswordError}</p>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center justify-end gap-1.5 pt-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => setIsEditingMedia(false)}
-                                      className="bg-[#faf6ee] hover:bg-[#eae0bf] text-slate-700 px-3 py-1 rounded text-[10px] transition border border-[#cbdcb3] cursor-pointer"
-                                    >
-                                      إلغاء
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveCustomMedia(selectedUnit.lessons[currentLessonIdx].id)}
-                                      className="bg-amber-700 hover:bg-amber-800 text-white px-3 py-1 rounded text-[10px] transition border border-transparent font-bold cursor-pointer"
-                                    >
-                                      حفظ الرابط 💾
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Al-Hakawati Panel styled to match the antique book page */}
-                            <div className="bg-[#f0e8cc] border border-[#e2d5ab]/70 rounded-xl p-3.5 flex flex-col space-y-3 shadow-inner text-right select-none">
-                              <div className="flex items-center gap-2.5">
-                                <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-300 flex items-center justify-center text-xl shrink-0 ${isSpeaking && !isPaused ? "animate-bounce" : ""}`}>
-                                  👳‍♂️
-                                </div>
-                                <div className="flex-1">
-                                  <h4 className="text-xs font-bold font-serif text-[#1e150b] flex items-center gap-1 justify-end">
-                                    <span>الحَكَواتي السُّودانِي الْمُثَقَّف 🎧</span>
-                                    {isSpeaking && !isPaused && (
-                                      <span className="flex gap-0.5 items-end h-2 w-4">
-                                        <span className="w-0.5 bg-amber-900 h-1.5 animate-pulse rounded-full"></span>
-                                        <span className="w-0.5 bg-amber-900 h-2.5 animate-pulse rounded-full"></span>
-                                        <span className="w-0.5 bg-amber-900 h-1 animate-pulse rounded-full"></span>
-                                      </span>
-                                    )}
-                                  </h4>
-                                  <p className="text-[10px] text-[#5e4f3c] leading-snug">استمع للتلاوة المنهجية الفصيحة للتركيز والحفظ.</p>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-1.5 justify-end">
-                                {availableVoices.length > 0 && (
-                                  <select
-                                    value={selectedVoice?.name || ""}
-                                    onChange={(e) => {
-                                      const v = availableVoices.find(voice => voice.name === e.target.value);
-                                      if (v) setSelectedVoice(v);
-                                    }}
-                                    className="bg-[#FAF6EE] text-[10px] text-amber-950 border border-[#e6daae] p-1 rounded-lg font-serif outline-none"
-                                  >
-                                    {availableVoices.filter(v => v.lang.startsWith("ar")).map(voice => (
-                                      <option key={voice.name} value={voice.name}>
-                                        {voice.name} {voice.lang === "ar-EG" ? "🇪🇬" : voice.lang === "ar-SA" ? "🇸🇦" : "🌐"}
-                                      </option>
-                                    ))}
-                                    {availableVoices.filter(v => !v.lang.startsWith("ar")).slice(0, 3).map(voice => (
-                                      <option key={voice.name} value={voice.name}>
-                                        {voice.name} ({voice.lang})
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-
-                                <select
-                                  value={speechRate}
-                                  onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
-                                  className="bg-[#FAF6EE] text-[10px] text-amber-950 border border-[#e6daae] p-1 rounded-lg font-serif outline-none"
-                                >
-                                  <option value={0.8}>بطيء (0.8x)</option>
-                                  <option value={1.0}>عادي (1.0x)</option>
-                                  <option value={1.25}>سريع (1.25x)</option>
-                                </select>
-
-                                <div className="flex items-center gap-1">
-                                  {!isSpeaking ? (
-                                    <button
-                                      onClick={() => startSpeakingAll(selectedUnit.lessons[currentLessonIdx].content)}
-                                      className="bg-amber-800 hover:bg-amber-900 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] flex items-center gap-1 border border-transparent shadow shadow-amber-900/10 cursor-pointer transition-all animate-pulse"
-                                    >
-                                      <Volume1 className="w-3.5 h-3.5" />
-                                      <span>اقرأ لي المنهج 🎙️</span>
-                                    </button>
-                                  ) : (
-                                    <>
-                                      {isPaused ? (
-                                        <button
-                                          onClick={resumeSpeaking}
-                                          className="bg-green-700 hover:bg-green-800 text-white font-bold px-2 py-1 rounded text-[10px] flex items-center gap-0.5 cursor-pointer"
-                                        >
-                                          <Play className="w-3 h-3" />
-                                          <span>استئناف</span>
-                                        </button>
-                                      ) : (
-                                        <button
-                                          onClick={pauseSpeaking}
-                                          className="bg-amber-700 hover:bg-amber-800 text-white font-bold px-2 py-1 rounded text-[10px] flex items-center gap-0.5 cursor-pointer"
-                                        >
-                                          <Pause className="w-3 h-3" />
-                                          <span>مؤقت</span>
-                                        </button>
-                                      )}
-
-                                      <button
-                                        onClick={stopSpeaking}
-                                        className="bg-red-750 hover:bg-red-800 text-white font-bold px-2 py-1 rounded text-[10px] flex items-center gap-0.5 cursor-pointer"
-                                      >
-                                        <span className="w-1.5 h-1.5 bg-white rounded-sm"></span>
-                                        <span>إيقاف</span>
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Stamp Action at the end of Right Page */}
-                          <div className="flex items-center justify-between border-t border-[#e6daae]/80 pt-3 select-none">
+                    return (
+                      <div className="relative bg-[#FAF6EE] text-[#2c221a] rounded-3xl border-4 border-[#3e2e21] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col ring-8 ring-amber-950/20 h-[620px] md:h-[685px] [perspective:1500px]">
+                        {/* Immersive Top Toolbar (Reading Mode, TOC) */}
+                        <div className="px-6 py-2.5 bg-[#ebdcb4]/30 border-b border-[#ebdcb4]/60 flex items-center justify-between select-none font-sans text-xs text-amber-950 shrink-0 z-20 gap-2">
+                          <div className="flex items-center gap-1.5">
+                            {/* Toggle Table of Contents */}
                             <button
                               onClick={() => {
                                 handlePlaySound("click");
-                                onToggleFavoriteLesson(selectedUnit.lessons[currentLessonIdx].id);
+                                setIsTOCExpanded(!isTOCExpanded);
                               }}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition border cursor-pointer ${
-                                favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id)
-                                  ? "bg-red-500/10 border-red-500/30 text-red-700 font-serif"
-                                  : "bg-[#e2d5ab]/30 border-[#cfc49c] text-amber-900 font-serif hover:bg-[#e2d5ab]/60"
+                              className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                                isTOCExpanded 
+                                  ? "bg-amber-800 text-white border-amber-600 font-serif" 
+                                  : "bg-[#faf6ee] hover:bg-[#ebdcb4] text-amber-950 border-[#ebdcb3]"
                               }`}
                             >
-                              <Heart className={`w-3 h-3 ${favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "fill-red-700 text-red-700" : ""}`} />
-                              <span>{favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "في مفضلتي ❤️" : "أضف للمفضلة 🤍"}</span>
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>فهرس الصفحات 📜</span>
                             </button>
-                            <span className="text-[10px] text-[#8a7250] font-mono leading-none">مقرر التاريخ المنهجي</span>
+                          </div>
+
+                          <div className="hidden sm:flex items-center gap-1 text-[11px] font-bold text-[#8a7250]">
+                            <span>جاري تصفح:</span>
+                            <span className="font-serif text-[#3e2e21]">{activeLesson.title} 📖</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            {/* Toggle Reading Mode */}
+                            <button
+                              onClick={() => {
+                                handlePlaySound("levelup");
+                                setIsReadingMode(!isReadingMode);
+                              }}
+                              className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                                isReadingMode 
+                                  ? "bg-amber-800 text-white border-amber-700 font-serif animate-pulse" 
+                                  : "bg-[#faf6ee] hover:bg-[#ebdcb4] text-amber-950 border-[#ebdcb3]"
+                              }`}
+                            >
+                              {isReadingMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                              <span>{isReadingMode ? "المغادرة لوضع العرض 👓" : "وضع الدراسة الهادئة 👓"}</span>
+                            </button>
                           </div>
                         </div>
 
-                        {/* ==================== LEFT PAGE (Lesson Content & Golden Key Points) ==================== */}
-                        <div className="p-6 md:p-8 flex flex-col justify-between space-y-6 relative">
-                          <div className="space-y-5">
-                            {/* Page Header */}
-                            <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
-                              <span className="text-[10px] font-bold text-[#8a7250] select-none">صفحة {currentLessonIdx * 2 + 2}</span>
-                              <span className="text-[10px] font-bold text-[#8a7250] leading-none font-sans select-none">الفصل {currentLessonIdx + 1}: تفاصيل المعرفة</span>
-                            </div>
+                        {/* Immersive Progress Bar of the lesson parts (RTL aligned) */}
+                        <div className="w-full bg-[#ebdcb4]/20 border-b border-[#ebdcb4]/40 h-2.5 relative flex items-center shrink-0 overflow-visible">
+                          <div 
+                            className="absolute right-0 top-0 bottom-0 bg-gradient-to-l from-amber-700 to-amber-900 transition-all duration-500 ease-out" 
+                            style={{ width: `${(bookPageIndex / 3) * 100}%` }}
+                          ></div>
+                          {/* Dot milestones for the 4 pages */}
+                          {[0, 1, 2, 3].map((idx) => {
+                            const isPastOrActive = bookPageIndex >= idx;
+                            const pageTitles = ["الغلاف", "البداية", "الوسط", "الملخص"];
+                            return (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  handlePlaySound("click");
+                                  setBookPageIndex(idx);
+                                }}
+                                title={pageTitles[idx]}
+                                style={{ right: `${(idx / 3) * 100}%` }}
+                                className={`absolute w-3.5 h-3.5 rounded-full border-2 transform translate-x-1/2 cursor-pointer transition-all duration-300 z-10 ${
+                                  isPastOrActive 
+                                    ? "bg-amber-900 border-amber-950 scale-125 shadow-sm" 
+                                    : "bg-[#faf6ee] border-[#ebdcb3] hover:border-amber-700 hover:scale-110"
+                                }`}
+                              />
+                            );
+                          })}
+                        </div>
 
-                            {/* Main Paragraphs Area with gorgeous ruled serif typography */}
-                            <div className="space-y-3.5 text-[#2c221a] font-serif text-sm md:text-base leading-relaxed text-right">
-                              {selectedUnit.lessons[currentLessonIdx].content.map((p, pIdx) => {
-                                const isReadingThis = currentSpeechParagraphIndex === pIdx && isSpeaking;
-                                return (
-                                  <div 
-                                    key={pIdx} 
-                                    className={`transition-all duration-300 p-3 rounded-lg ${
-                                      isReadingThis 
-                                        ? "bg-amber-950/10 border-r-4 border-amber-700 text-amber-950 font-bold scale-[1.01] shadow-sm ml-2 animate-[pulse_1.5s_infinite]" 
-                                        : "border-transparent text-[#2c221a]"
-                                    }`}
-                                  >
-                                    <p className="indent-4 leading-relaxed font-serif text-slate-800 text-sm md:text-[15px]">{p}</p>
+                        {/* Slide-out Table of Contents Drawer */}
+                        <AnimatePresence>
+                          {isTOCExpanded && (
+                            <>
+                              {/* Backdrop */}
+                              <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 0.3 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setIsTOCExpanded(false)}
+                                className="absolute inset-0 bg-black z-35 cursor-pointer"
+                              />
+                              {/* Sidebar Parchment Panel */}
+                              <motion.div
+                                initial={{ x: "100%" }}
+                                animate={{ x: 0 }}
+                                exit={{ x: "100%" }}
+                                transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                                className="absolute right-0 top-0 bottom-0 w-72 bg-[#f5ebd1] border-l-2 border-[#ebdcb4] shadow-2xl z-40 p-5 flex flex-col justify-between font-sans text-right"
+                                style={{ backgroundImage: "linear-gradient(to right, rgba(0,0,0,0.03) 0%, rgba(255,255,255,0.4) 100%)" }}
+                              >
+                                <div className="space-y-4">
+                                  <div className="flex items-center justify-between border-b border-amber-900/10 pb-2.5">
+                                    <button 
+                                      onClick={() => setIsTOCExpanded(false)} 
+                                      className="text-amber-900 border border-amber-900/10 hover:bg-[#eae0bf] p-1.5 rounded-lg transition animate-[fadeIn_0.2s_ease]"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                    <span className="font-serif font-black text-amber-950 text-sm flex items-center gap-1.5">
+                                      <span>فهرس موضوعات الدرس 📋</span>
+                                      <BookOpen className="w-4 h-4 text-amber-700" />
+                                    </span>
                                   </div>
-                                );
-                              })}
+
+                                  <div className="space-y-2 pt-1 overflow-y-auto max-h-[380px] pr-0.5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                                    {[
+                                      { id: 0, icon: "🎨", title: "غلاف الدرس والاستكشاف البصري", desc: "الغلاف الإيضاحي المنهجي والوسائط التفاعلية" },
+                                      { id: 1, icon: "🏛️", title: "المنهج الدراسي - الجزء الأول", desc: "عرض أحداث التاريخ وشروح الحكواتي السوداني" },
+                                      { id: 2, icon: "📖", title: "المنهج الدراسي - الجزء الثاني", desc: "تكملة وقائع الدرس والحقائق العريقة" },
+                                      { id: 3, icon: "🏆", title: "كبسولة الحفظ الذهبي والاختبار", desc: "أهم ملامح الحفظ، المفضلة، واختبار الفصل" }
+                                    ].map((p) => {
+                                      const isActive = bookPageIndex === p.id;
+                                      return (
+                                        <button
+                                          key={p.id}
+                                          onClick={() => {
+                                            handlePlaySound("levelup");
+                                            setBookPageIndex(p.id);
+                                            setIsTOCExpanded(false);
+                                          }}
+                                          className={`w-full text-right p-3 rounded-xl border transition-all flex flex-col gap-1 cursor-pointer ${
+                                            isActive 
+                                              ? "bg-amber-800 text-white border-amber-600 shadow shadow-amber-955/30" 
+                                              : "bg-[#FAF6EE]/80 hover:bg-[#FAF6EE] text-amber-950 border-amber-500/15 hover:border-amber-500/35"
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between font-serif font-bold text-xs">
+                                            <span>صفحة {currentLessonIdx * 4 + p.id + 1}</span>
+                                            <span className="flex items-center gap-1">
+                                              <span>{p.title}</span>
+                                              <span className="text-sm shrink-0">{p.icon}</span>
+                                            </span>
+                                          </div>
+                                          <p className={`text-[10px] ${isActive ? "text-amber-100" : "text-amber-900/70"}`}>
+                                            {p.desc}
+                                          </p>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                <div className="text-center font-sans text-[10px] text-amber-900/60 border-t border-[#ebdcb4]/60 pt-3">
+                                  <span>مقرر التاريخ للتوجيه المدرسي السوداني 🇸🇩</span>
+                                </div>
+                              </motion.div>
+                            </>
+                          )}
+                        </AnimatePresence>
+
+                        {/* Page flipper transition frame */}
+                        <div className="flex-1 overflow-hidden relative">
+                          <AnimatePresence mode="wait">
+                            <motion.div
+                              key={currentLessonIdx + "_" + (isWide ? currentSpread : bookPageIndex)}
+                              initial={{ opacity: 0, rotateY: 35, scale: 0.97, transformOrigin: "center center" }}
+                              animate={{ opacity: 1, rotateY: 0, scale: 1 }}
+                              exit={{ opacity: 0, rotateY: -35, scale: 0.97, transformOrigin: "center center" }}
+                              transition={{ duration: 0.45, ease: "easeInOut" }}
+                              className="grid grid-cols-1 md:grid-cols-2 relative h-full"
+                              style={{ transformStyle: "preserve-3d" }}
+                            >
+                            {/* Realistic book binding center spine and inner shadows */}
+                            <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -ml-[2px] w-[4px] bg-gradient-to-r from-black/15 via-[#423325]/30 to-black/15 shadow-xl z-20 pointer-events-none"></div>
+                            <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -ml-8 w-16 bg-gradient-to-r from-transparent via-black/[0.04] to-transparent pointer-events-none z-10"></div>
+
+                            {/* ==================== PAGE 0: BOOK COVER (RIGHT COLUMN IN SPREAD 0) ==================== */}
+                            <div className={`${currentSpread === 0 ? "md:flex" : "md:hidden"} ${bookPageIndex === 0 ? "flex" : "hidden"} md:border-l md:border-[#ebdcb4] p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                              {/* Page Bookmark Tag */}
+                              <div className="absolute top-0 right-8 bg-[#3e2e21] text-[#FAF6EE] text-[9px] px-2 py-1 rounded-b-md shadow font-bold tracking-wider select-none">
+                                التاريخ المنهجي 🇸🇩
+                              </div>
+
+                              <div className="space-y-4">
+                                {/* Page Header */}
+                                <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
+                                  <span className="text-[10px] font-bold text-[#8a7250] tracking-wider font-sans select-none">المنهج السوداني المعتمد 📖</span>
+                                  <span className="text-[10px] font-bold text-[#8a7250] select-none">الصفحة {currentLessonIdx * 4 + 1}</span>
+                                </div>
+
+                                {/* Lesson Title Section */}
+                                <div className="space-y-2">
+                                  <span className="text-amber-700 text-xs font-bold block select-none">الفصل {currentLessonIdx + 1} • غلاف الدرس</span>
+                                  <h3 className="text-xl md:text-2xl font-bold font-serif text-[#1e150b] tracking-tight leading-snug">{activeLesson.title}</h3>
+                                </div>
+
+                                {/* Custom media or illustrative elements */}
+                                <div className="space-y-2">
+                                  {renderLessonMedia(activeLesson.id, activeLesson.illustration)}
+                                  
+                                  <div className="flex items-center justify-between">
+                                    <button
+                                      onClick={() => handleStartEditingMedia(activeLesson.id)}
+                                      className="text-[10px] text-amber-900 font-bold hover:text-amber-700 transition flex items-center gap-1 bg-[#eae0bf]/50 px-2 py-1 rounded-lg border border-[#e6daae] cursor-pointer"
+                                    >
+                                      <Settings className="w-3 h-3 text-[#3e2e21]" />
+                                      <span>{customMedia[activeLesson.id] ? "تعديل رابط الصورة المخصصة 🎨" : "إضافة صورة متحركة أو فيديو أو رابط درايف لهذا الدرس 🔗"}</span>
+                                    </button>
+                                    {customMedia[activeLesson.id] && (
+                                      <button
+                                        onClick={() => handleResetCustomMedia(activeLesson.id)}
+                                        className="text-[10px] text-red-700 hover:text-red-600 font-bold flex items-center gap-0.5 cursor-pointer"
+                                        title="استعادة الصورة الأصلية"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        <span>حذف التخصيص 🚫</span>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {isEditingMedia && (
+                                    <div className="bg-[#f0e8cb] border border-[#ebdcb4] p-3 rounded-xl space-y-3 font-sans text-right animate-[fadeIn_0.3s_ease]">
+                                      <div className="space-y-0.5">
+                                        <h5 className="text-[11px] font-bold text-amber-950">تخصيص وسائط الدرس 🎨</h5>
+                                        <p className="text-[9px] text-[#5e4f3c]">أي رابط صورة مباشرة، صورة متحركة GIF، فيديو، رابط يوتيوب أو Google Drive (يتم حفظه تلقائياً لنمط الإطار المستديم).</p>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-[10px] text-amber-950 block select-none">رابط الوسائط (URL):</label>
+                                        <input
+                                          type="text"
+                                          value={mediaUrlInput}
+                                          onChange={(e) => setMediaUrlInput(e.target.value)}
+                                          placeholder="https://example.com/image.gif أو رابط قوقل درايف..."
+                                          dir="ltr"
+                                          className="w-full text-[10px] p-2 rounded-lg bg-[#FAF6EE] border border-[#e6daae] text-slate-900 placeholder-[#9c9172] focus:outline-none focus:border-amber-600 text-left"
+                                        />
+                                      </div>
+
+                                      <div className="grid grid-cols-3 gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => setMediaTypeInput("image")}
+                                          className={`px-2 py-1 rounded text-[9px] transition border cursor-pointer ${mediaTypeInput === "image" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
+                                        >
+                                          صورة / GIF ثابت
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setMediaTypeInput("video")}
+                                          className={`px-2 py-1 rounded-[9px] text-[9px] transition border cursor-pointer ${mediaTypeInput === "video" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
+                                        >
+                                          فيديو مباشر / يوتيوب
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setMediaTypeInput("drive")}
+                                          className={`px-2 py-1 rounded-[9px] text-[9px] transition border cursor-pointer ${mediaTypeInput === "drive" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
+                                        >
+                                          مستند قوقل درايف
+                                        </button>
+                                      </div>
+
+                                      <div className="space-y-1 pt-0.5">
+                                        <label className="text-[10px] text-amber-950 font-bold block select-none text-right">كلمة المرور لتأكيد حفظ وحماية التخصيص 🔒:</label>
+                                        <input
+                                          type="password"
+                                          value={mediaPasswordInput}
+                                          onChange={(e) => setMediaPasswordInput(e.target.value)}
+                                          placeholder="أدخل كلمة المرور السرية..."
+                                          className="w-full text-xs p-2 rounded-lg bg-[#FAF6EE] border border-[#e6daae] text-black placeholder-slate-400 focus:outline-none focus:border-amber-600 text-center outline-none"
+                                        />
+                                        {mediaPasswordError && (
+                                          <p className="text-[9px] text-red-700 font-bold text-center">{mediaPasswordError}</p>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center justify-end gap-1.5 pt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => setIsEditingMedia(false)}
+                                          className="bg-[#faf6ee] hover:bg-[#eae0bf] text-slate-700 px-3 py-1 rounded text-[10px] transition border border-[#cbdcb3] cursor-pointer"
+                                        >
+                                          إلغاء
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveCustomMedia(activeLesson.id)}
+                                          className="bg-amber-700 hover:bg-amber-800 text-white px-3 py-1 rounded text-[10px] transition border border-transparent font-bold cursor-pointer"
+                                        >
+                                          حفظ الرابط 💾
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between border-t border-[#e6daae]/80 pt-3 select-none text-[10px] text-[#8a7250] font-sans mt-auto">
+                                <span>قسم التمهيد والاستكشاف البصري 🔍</span>
+                                <span className="font-mono leading-none">مقرر التاريخ المنهجي</span>
+                              </div>
                             </div>
 
-                            {/* Dynamic Key points list printed as ruled notebook checklist */}
-                            <div className="bg-[#FAF8F5] border border-[#dcd6c1] p-4 rounded-xl space-y-2.5 shadow-inner">
-                              <span className="font-serif font-black text-[#1e150b] text-[11px] md:text-xs flex items-center gap-1 justify-end select-none">
-                                <span>أهَمُّ ملامِحِ الدَّرسِ لِلحفظِ السَّريع:</span>
-                                <Award className="w-3.5 h-3.5 text-amber-700 fill-amber-300/30" />
-                              </span>
-                              <ul className="space-y-1.5 text-[11px] md:text-xs text-[#3a3026]">
-                                {selectedUnit.lessons[currentLessonIdx].keyPoints.map((kp, kpIdx) => (
-                                  <li key={kpIdx} className="leading-relaxed text-right flex items-start justify-end gap-1.5 font-serif">
-                                    <span className="flex-1 text-[13px] text-slate-700">{kp}</span>
-                                    <span className="text-amber-700 font-bold select-none leading-none mt-0.5">✔</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
+                            {/* ==================== PAGE 1: NARRATIONS PART 1 (LEFT COLUMN IN SPREAD 0) ==================== */}
+                            <div className={`${currentSpread === 0 ? "md:flex" : "md:hidden"} ${bookPageIndex === 1 ? "flex" : "hidden"} p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                              <div className="space-y-4">
+                                {/* Page Header */}
+                                <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
+                                  <span className="text-[10px] font-bold text-[#8a7250] select-none">الصفحة {currentLessonIdx * 4 + 2}</span>
+                                  <span className="text-[10px] font-bold text-[#8a7250] leading-none font-sans select-none">{activeLesson.title} • الجزء الأول</span>
+                                </div>
 
-                          {/* Footer Page numbers and bookmarks */}
-                          <div className="flex items-center justify-between border-t border-[#e6daae]/80 pt-3 select-none">
-                            <span className="text-[10px] text-[#8a7250] font-sans">تاريخ السودان الحديث 🇸🇩</span>
-                            <span className="text-[10px] text-[#8a7250] font-serif">الصف {selectedUnit.title}</span>
-                          </div>
+                                {/* Main Paragraphs Area with gorgeous ruled serif typography */}
+                                <div className="space-y-3 text-[#2c221a] font-serif leading-relaxed text-right overflow-y-auto max-h-[220px] md:max-h-[285px] pr-1.5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                                  {firstPageParagraphs.map((p, pIdx) => {
+                                    const isReadingThis = currentSpeechParagraphIndex === pIdx && isSpeaking;
+                                    return (
+                                      <div 
+                                        key={pIdx} 
+                                        className={`transition-all duration-300 p-2.5 rounded-lg ${
+                                          isReadingThis 
+                                            ? "bg-amber-950/10 border-r-4 border-amber-700 text-amber-950 font-bold scale-[1.01] shadow-sm ml-1" 
+                                            : "border-transparent text-[#2c221a]"
+                                        }`}
+                                      >
+                                        <p className="indent-2 leading-relaxed font-serif text-slate-800 text-xs md:text-[14px]">{p}</p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Al-Hakawati Panel styled to match the antique book page */}
+                                <div className="bg-[#f0e8cc] border border-[#e2d5ab]/70 rounded-xl p-3 flex flex-col space-y-2 shadow-inner text-right select-none">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-8 h-8 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 border border-amber-300 flex items-center justify-center text-md shrink-0 ${isSpeaking && !isPaused ? "animate-bounce" : ""}`}>
+                                      👳‍♂️
+                                    </div>
+                                    <div className="flex-1">
+                                      <h4 className="text-[11px] font-bold font-serif text-[#1e150b] flex items-center gap-1 justify-end">
+                                        <span>الحَكَواتي • استماع للجزء الأول 🎧</span>
+                                      </h4>
+                                      <p className="text-[9px] text-[#5e4f3c] leading-none">استمع للتلاوة التفصيلية الفصيحة للتركيز والحفظ.</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                    {!isSpeaking ? (
+                                      <button
+                                        onClick={() => startSpeakingAll(firstPageParagraphs)}
+                                        className="bg-amber-800 hover:bg-amber-900 text-white font-bold px-3 py-1 rounded-lg text-[9px] flex items-center gap-1 cursor-pointer transition-all animate-pulse"
+                                      >
+                                        <Volume1 className="w-3 h-3" />
+                                        <span>اقرأ لي هذا القسم 🎙️</span>
+                                      </button>
+                                    ) : (
+                                      <>
+                                        {isPaused ? (
+                                          <button
+                                            onClick={resumeSpeaking}
+                                            className="bg-green-700 hover:bg-green-800 text-white font-bold px-2 py-0.5 rounded text-[9px] flex items-center gap-0.5 cursor-pointer"
+                                          >
+                                            <Play className="w-2.5 h-2.5" />
+                                            <span>استئناف</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={pauseSpeaking}
+                                            className="bg-amber-700 hover:bg-amber-800 text-white font-bold px-2 py-0.5 rounded text-[9px] flex items-center gap-0.5 cursor-pointer"
+                                          >
+                                            <Pause className="w-2.5 h-2.5" />
+                                            <span>مؤقت</span>
+                                          </button>
+                                        )}
+
+                                        <button
+                                          onClick={stopSpeaking}
+                                          className="bg-red-750 hover:bg-red-800 text-white font-bold px-2 py-0.5 rounded text-[9px] flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <span>إيقاف</span>
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Footer Page numbers and bookmarks */}
+                              <div className="flex items-center justify-between border-t border-[#e6daae]/80 pt-3 select-none text-[10px] text-[#8a7250] font-sans mt-auto">
+                                <span>تاريخ السودان الحديث 🇸🇩</span>
+                                <span className="font-serif">انتقل لقلب الصفحة للمزيد ⏪</span>
+                              </div>
+                            </div>
+
+                            {/* ==================== PAGE 2: NARRATIONS PART 2 (RIGHT COLUMN IN SPREAD 1) ==================== */}
+                            <div className={`${currentSpread === 1 ? "md:flex" : "md:hidden"} ${bookPageIndex === 2 ? "flex" : "hidden"} md:border-l md:border-[#ebdcb4] p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                              <div className="space-y-4">
+                                {/* Page Header */}
+                                <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
+                                  <span className="text-[10px] font-bold text-[#8a7250] select-none">الصفحة {currentLessonIdx * 4 + 3}</span>
+                                  <span className="text-[10px] font-bold text-[#8a7250] leading-none font-sans select-none">{activeLesson.title} • الجزء الثاني</span>
+                                </div>
+
+                                {/* Main Paragraphs Area with gorgeous ruled serif typography */}
+                                {secondPageParagraphs.length > 0 ? (
+                                  <div className="space-y-3 text-[#2c221a] font-serif leading-relaxed text-right overflow-y-auto max-h-[220px] md:max-h-[285px] pr-1.5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                                    {secondPageParagraphs.map((p, pIdx) => {
+                                      const isReadingThis = currentSpeechParagraphIndex === pIdx && isSpeaking; // local array speech
+                                      return (
+                                        <div 
+                                          key={pIdx} 
+                                          className={`transition-all duration-300 p-2.5 rounded-lg ${
+                                            isReadingThis 
+                                              ? "bg-amber-950/10 border-r-4 border-amber-700 text-amber-950 font-bold scale-[1.01] shadow-sm ml-1" 
+                                              : "border-transparent text-[#2c221a]"
+                                          }`}
+                                        >
+                                          <p className="indent-2 leading-relaxed font-serif text-slate-800 text-xs md:text-[14px]">{p}</p>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center text-center p-5 space-y-3 my-4 bg-amber-500/5 rounded-xl border border-dashed border-amber-500/10">
+                                    <div className="text-3xl">📜</div>
+                                    <p className="text-xs font-serif font-bold text-amber-900 leading-snug">اكتمل التمهيد الأساسي لهذا الفصل الدراسي</p>
+                                    <p className="text-[11px] text-[#6d5b45] leading-relaxed">تابع الصفحة المجاورة مباشرة لاكتشاف كبسولة الحفظ الذهبي والحقائق الهامة للدرس.</p>
+                                  </div>
+                                )}
+
+                                {/* Al-Hakawati Panel for Part 2 if content exists */}
+                                {secondPageParagraphs.length > 0 && (
+                                  <div className="bg-[#f0e8cc] border border-[#e2d5ab]/70 rounded-xl p-3 flex flex-col space-y-2 shadow-inner text-right select-none">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-8 h-8 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 border border-amber-300 flex items-center justify-center text-md shrink-0 ${isSpeaking && !isPaused ? "animate-bounce" : ""}`}>
+                                        👳‍♂️
+                                      </div>
+                                      <div className="flex-1">
+                                        <h4 className="text-[11px] font-bold font-serif text-[#1e150b] flex items-center gap-1 justify-end">
+                                          <span>الحَكَواتي • استماع للجزء الثاني 🎧</span>
+                                        </h4>
+                                        <p className="text-[9px] text-[#5e4f3c] leading-none">تكملة أحداث القسم الثاني وصوتيات التثبيت.</p>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 justify-end">
+                                      {!isSpeaking ? (
+                                        <button
+                                          onClick={() => startSpeakingAll(secondPageParagraphs)}
+                                          className="bg-amber-800 hover:bg-amber-900 text-white font-bold px-3 py-1 rounded-lg text-[9px] flex items-center gap-1 cursor-pointer transition-all animate-pulse"
+                                        >
+                                          <Volume1 className="w-3 h-3" />
+                                          <span>اقرأ لي هذا القسم 🎙️</span>
+                                        </button>
+                                      ) : (
+                                        <>
+                                          {isPaused ? (
+                                            <button
+                                              onClick={resumeSpeaking}
+                                              className="bg-green-700 hover:bg-green-800 text-white font-bold px-2 py-0.5 rounded text-[9px] flex items-center gap-0.5 cursor-pointer"
+                                            >
+                                              <Play className="w-2.5 h-2.5" />
+                                              <span>استئناف</span>
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={pauseSpeaking}
+                                              className="bg-amber-700 hover:bg-amber-800 text-white font-bold px-2 py-0.5 rounded text-[9px] flex items-center gap-0.5 cursor-pointer"
+                                            >
+                                              <Pause className="w-2.5 h-2.5" />
+                                              <span>مؤقت</span>
+                                            </button>
+                                          )}
+
+                                          <button
+                                            onClick={stopSpeaking}
+                                            className="bg-red-750 hover:bg-red-800 text-white font-bold px-2 py-0.5 rounded text-[9px] flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <span>إيقاف</span>
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between border-t border-[#e6daae]/80 pt-3 select-none text-[10px] text-[#8a7250] font-sans mt-auto">
+                                <span>مستند الفحص والوقائع التاريخية 🏛️</span>
+                                <span className="font-mono leading-none">مقرر التاريخ المنهجي</span>
+                              </div>
+                            </div>
+
+                            {/* ==================== PAGE 3: KEY POINTS & RECAP (LEFT COLUMN IN SPREAD 1) ==================== */}
+                            <div className={`${currentSpread === 1 ? "md:flex" : "md:hidden"} ${bookPageIndex === 3 ? "flex" : "hidden"} p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                              <div className="space-y-4">
+                                {/* Page Header */}
+                                <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
+                                  <span className="text-[10px] font-bold text-[#8a7250] select-none">الصفحة {currentLessonIdx * 4 + 4}</span>
+                                  <span className="text-[10px] font-bold text-[#8a7250] leading-none font-sans select-none">{activeLesson.title} • ملخص الحفظ</span>
+                                </div>
+
+                                {/* Dynamic Key points list printed as ruled notebook checklist */}
+                                <div className="bg-[#FAF8F5] border border-[#dcd6c1] p-3.5 rounded-xl space-y-2 shadow-inner overflow-y-auto max-h-[180px] md:max-h-[245px] pr-1.5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                                  <span className="font-serif font-black text-[#1e150b] text-[11px] md:text-xs flex items-center gap-1 justify-end select-none">
+                                    <span>أهَمُّ ملامِحِ الدَّرسِ لِلحفظِ السَّريع:</span>
+                                    <Award className="w-3.5 h-3.5 text-amber-700 fill-amber-300/30" />
+                                  </span>
+                                  <ul className="space-y-1.5 text-[11px] md:text-xs text-[#3a3026]">
+                                    {activeLesson.keyPoints.map((kp, kpIdx) => (
+                                      <li key={kpIdx} className="leading-relaxed text-right flex items-start justify-end gap-1.5 font-serif">
+                                        <span className="flex-1 text-[12px] text-slate-700 leading-tight">{kp}</span>
+                                        <span className="text-amber-700 font-bold select-none leading-none mt-0.5">✔</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+
+                                {/* Stamp Action / Lesson Complete Stamp */}
+                                <div className="flex flex-col items-center justify-center py-2.5 border-t border-[#e6daae]/80 mt-auto select-none space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => {
+                                        handlePlaySound("click");
+                                        onToggleFavoriteLesson(activeLesson.id);
+                                      }}
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition border cursor-pointer ${
+                                        favoriteLessons.includes(activeLesson.id)
+                                          ? "bg-red-500/10 border-red-500/30 text-red-700 font-serif"
+                                          : "bg-[#e2d5ab]/30 border-[#cfc49c] text-amber-900 font-serif hover:bg-[#e2d5ab]/60"
+                                      }`}
+                                    >
+                                      <Heart className={`w-3 h-3 ${favoriteLessons.includes(activeLesson.id) ? "fill-red-700 text-red-700" : ""}`} />
+                                      <span>{favoriteLessons.includes(activeLesson.id) ? "في مفضلتي ❤️" : "أضف للمفضلة 🤍"}</span>
+                                    </button>
+
+                                    {/* Lesson Exam Shortcut */}
+                                    <button
+                                      onClick={() => startLessonQuiz(activeLesson.id, activeLesson.title)}
+                                      className="bg-emerald-950/10 hover:bg-emerald-950/20 text-emerald-800 border border-emerald-600/35 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>اختبار الفصل 📝</span>
+                                    </button>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-2 bg-[#eae0bf]/40 px-3 py-1 rounded-lg border border-[#e2d5ab]/50">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                    <span className="text-[9px] text-amber-950 font-sans">أشرف المعلم والمنصة على إكمال الحفظ بنجاح</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between border-t border-[#e6daae]/80 pt-3 select-none text-[10px] text-[#8a7250] font-sans mt-auto">
+                                <span>خاتمة مراجعة الحقائق والمفاهيم 🌟</span>
+                                <span className="font-serif">الصف {selectedUnit.title}</span>
+                              </div>
+                            </div>
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+
+                        {/* Book controls row containing Lesson previous and next page-turning triggers */}
+                        <div className="flex items-center justify-between border-t border-[#ebdcb4] pt-4 px-6 md:px-8 shrink-0 font-sans mt-auto">
+                          <button
+                            disabled={!hasPrev}
+                            onClick={handlePrevPage}
+                            className="bg-[#efe7cc] hover:bg-[#ebdcb4] active:bg-[#dfd4b3] disabled:opacity-30 disabled:pointer-events-none text-amber-950 px-4 py-2 rounded-xl border border-[#ebdcb4]/80 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
+                          >
+                            <ChevronRight className="w-4 h-4 transform rotate-180" />
+                            <span>{isWide ? (currentSpread === 1 ? "الصفحة السابقة 📖" : "الدرس السابق 📖") : (bookPageIndex > 0 ? "الصفحة السابقة 📖" : "الدرس السابق 📖")}</span>
+                          </button>
+                          
+                          <span className="text-xs font-black text-amber-900 bg-[#eae0bf]/50 border border-[#e2d5ab] px-3 py-1 rounded-full select-none font-sans shadow-inner">
+                            {isWide ? (
+                              <span>الدرس {currentLessonIdx + 1} • الصفحات {currentSpread * 2 + 1} - {currentSpread * 2 + 2}</span>
+                            ) : (
+                              <span>الدرس {currentLessonIdx + 1} • صفحة {bookPageIndex + 1} من 4</span>
+                            )}
+                          </span>
+
+                          <button
+                            disabled={!hasNext}
+                            onClick={handleNextPage}
+                            className="bg-amber-800 hover:bg-amber-900 active:bg-amber-950 disabled:opacity-30 disabled:pointer-events-none text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
+                          >
+                            <span>{isWide ? (currentSpread === 0 ? "قلب الصفحة 📖" : "الدرس التالي 📖") : (bookPageIndex < 3 ? "قلب الصفحة 📖" : "الدرس التالي 📖")}</span>
+                            <ChevronLeft className="w-4 h-4 transform rotate-180" />
+                          </button>
                         </div>
-                      </motion.div>
-                    </AnimatePresence>
-
-                    {/* Book controls row containing Lesson previous and next page-turning triggers */}
-                    <div className="flex items-center justify-between border-t border-[#ebdcb4] pt-4 px-6 md:px-8 shrink-0 font-sans mt-auto">
-                      <button
-                        disabled={currentLessonIdx === 0}
-                        onClick={() => {
-                          handlePlaySound("levelup"); // Play page turn sound!
-                          setCurrentLessonIdx(prev => prev - 1);
-                        }}
-                        className="bg-[#efe7cc] hover:bg-[#ebdcb4] active:bg-[#dfd4b3] disabled:opacity-30 disabled:pointer-events-none text-amber-950 px-4 py-2 rounded-xl border border-[#ebdcb4]/80 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
-                      >
-                        <ChevronRight className="w-4 h-4 transform rotate-180" />
-                        <span>الدرس السابق 📖</span>
-                      </button>
-                      
-                      <span className="text-xs font-black text-amber-900 bg-[#eae0bf]/50 border border-[#e2d5ab] px-3 py-1 rounded-full select-none font-sans shadow-inner">
-                        الدرس {currentLessonIdx + 1} من {selectedUnit.lessons.length}
-                      </span>
-
-                      <button
-                        disabled={currentLessonIdx === selectedUnit.lessons.length - 1}
-                        onClick={() => {
-                          handlePlaySound("levelup"); // Play page turn sound!
-                          setCurrentLessonIdx(prev => prev + 1);
-                        }}
-                        className="bg-amber-800 hover:bg-amber-900 active:bg-amber-950 disabled:opacity-30 disabled:pointer-events-none text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
-                      >
-                        <span>قلب الصفحة 📖</span>
-                        <ChevronLeft className="w-4 h-4 transform rotate-180" />
-                      </button>
-                    </div>
-                  </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
