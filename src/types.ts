@@ -8,6 +8,7 @@ export enum QuestionType {
   TRUE_FALSE = "tf",    // True or False
   FILL_BLANK = "blank", // Fill in the blank
   MATCH = "match",      // Matching pairs
+  ESSAY = "essay",      // Essay question
 }
 
 export interface Question {

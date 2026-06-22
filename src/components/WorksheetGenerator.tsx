@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { playSound } from "./SoundEffects";
 import { Question, Unit, QuestionType } from "../types";
+import { generateDynamicQuestions } from "../utils/questionGenerator";
 
 interface WorksheetGeneratorProps {
   units: Unit[];
@@ -115,6 +116,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
     tf: true,
     blank: true,
     match: true,
+    essay: true,
     diagram: true
   });
 
@@ -152,47 +154,30 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
     setEvaluationScore(null);
     setUserAnswers({});
 
-    // 1. Gather all candidate base questions
-    let pool: Question[] = [...questions];
+    // 1 & 2. Get dynamically generated non-repeating questions pool up to exact target quantity
+    const itemsPerPage = 4; // neat density for worksheets
+    const maxNeededQuestions = pageCount * itemsPerPage;
 
-    if (scopeType === "unit") {
-      pool = pool.filter(q => q.unitId === selectedUnitId);
-    } else if (scopeType === "lesson") {
-      pool = pool.filter(q => q.lessonId === selectedLessonId);
-    } else if (scopeType === "favorites") {
-      if (favoriteLessons.length === 0) {
-        // Fallback or warning
-        pool = [];
-      } else {
-        pool = pool.filter(q => q.lessonId && favoriteLessons.includes(q.lessonId));
+    const selectedQuestions = generateDynamicQuestions(maxNeededQuestions, {
+      type: scopeType === "favorites" ? "comprehensive" : scopeType === "unit" ? "unit" : scopeType === "lesson" ? "lesson" : "comprehensive",
+      unitId: scopeType === "unit" ? selectedUnitId : undefined,
+      lessonId: scopeType === "lesson" ? selectedLessonId : undefined,
+      typesSelected: {
+        mcq: typesSelected.mcq,
+        tf: typesSelected.tf,
+        blank: typesSelected.blank,
+        match: typesSelected.match,
+        essay: typesSelected.essay
       }
-    }
-
-    // 2. Filter by selected types
-    pool = pool.filter(q => {
-      if (q.type === QuestionType.MCQ && !typesSelected.mcq) return false;
-      if (q.type === QuestionType.TRUE_FALSE && !typesSelected.tf) return false;
-      if (q.type === QuestionType.FILL_BLANK && !typesSelected.blank) return false;
-      if (q.type === QuestionType.MATCH && !typesSelected.match) return false;
-      return true;
     });
 
-    // Also include Diagram Labelling config if selected
-    let compiled: CompiledWorksheet[] = [];
     const scopeLabel = 
       scopeType === "favorites" ? "الدروس المفضلة ⭐" : 
       scopeType === "unit" ? `الوحدة ${selectedUnitId} - ${units.find(u => u.id === selectedUnitId)?.title}` : 
       scopeType === "lesson" ? `درس محدد: ${units.flatMap(u => u.lessons).find(l => l.id === selectedLessonId)?.title}` : 
       "كامل المقرر الدراسي للمرحلة الابتدائية التاريخية";
 
-    // 3. Partition questions to fit A4 page count (we allow up to 20 sheets)
-    // We distributes the pool evenly or shuffles/slices them
-    const itemsPerPage = 4; // neat density for worksheets
-    const maxNeededQuestions = pageCount * itemsPerPage;
-    
-    // Shuffle the pool to ensure unique sheets
-    const shuffledPool = [...pool].sort(() => 0.5 - Math.random());
-    const selectedQuestions = shuffledPool.slice(0, maxNeededQuestions);
+    let compiled: CompiledWorksheet[] = [];
 
     for (let pNum = 1; pNum <= pageCount; pNum++) {
       const startIdx = (pNum - 1) * itemsPerPage;
@@ -491,6 +476,16 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
             <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer select-none">
               <input
                 type="checkbox"
+                checked={typesSelected.essay}
+                onChange={(e) => setTypesSelected({ ...typesSelected, essay: e.target.checked })}
+                className="rounded text-amber-500 focus:ring-amber-500 accent-amber-500 w-4 h-4"
+              />
+              <span className="text-amber-400 font-semibold">الأسئلة المقالية (مقال تاريخي) ✍️</span>
+            </label>
+
+            <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer select-none">
+              <input
+                type="checkbox"
                 checked={typesSelected.match}
                 disabled // We utilize a clean dataset match pattern
                 className="rounded text-amber-500 focus:ring-amber-500 accent-amber-500 w-4 h-4 opacity-50"
@@ -710,6 +705,26 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                                 onChange={(e) => setUserAnswers({ ...userAnswers, [ansKey]: e.target.value })}
                                 className="w-full font-serif bg-[#18152c]/80 border border-indigo-950 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-400 placeholder:text-slate-500"
                               />
+                            </div>
+                          )}
+
+                          {q.type === QuestionType.ESSAY && (
+                            <div className="pt-2 space-y-3">
+                              <textarea
+                                disabled={isEvaluated}
+                                placeholder="اكتب مقالك التاريخي هنا بالتنمية والكفاءة العلمية والمقارنة..."
+                                value={userChoice || ""}
+                                onChange={(e) => setUserAnswers({ ...userAnswers, [ansKey]: e.target.value })}
+                                className="w-full h-32 font-serif bg-[#18152c]/85 border border-indigo-950 rounded-lg p-3 text-xs text-slate-100 focus:outline-none focus:border-amber-400 placeholder:text-slate-500 leading-relaxed outline-none"
+                              />
+                              {isEvaluated && (
+                                <div className="p-3 bg-amber-950/20 border border-amber-900/40 rounded-lg text-right space-y-2 animate-[fadeIn_0.4s_ease-out]">
+                                  <h6 className="text-[11px] font-bold text-amber-400 font-serif">النموذج المقالي المعتمد للمراجعة والمقارنة:</h6>
+                                  <p className="text-[11px] text-slate-250 whitespace-pre-wrap font-serif leading-relaxed">
+                                    {q.correctAnswer}
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -1001,6 +1016,19 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                               <div className="pl-4 font-serif">
                                 <p className="text-xs text-slate-500 italic">اكتب الإجابة النموذجية المكتملة للتمرين في الفراغ أدناه:</p>
                                 <div className="w-full border-b border-dashed border-slate-700 pt-3 h-8"></div>
+                              </div>
+                            )}
+
+                            {q.type === QuestionType.ESSAY && (
+                              <div className="pl-4 font-serif space-y-2">
+                                <p className="text-xs text-slate-500 italic">مساحة كتابة المقال التاريخي والتعبير المعرفي (سجل صياغتك الدقيقة هنا):</p>
+                                <div className="space-y-4 pt-2">
+                                  <div className="border-b border-dashed border-slate-600 h-6"></div>
+                                  <div className="border-b border-dashed border-slate-600 h-6"></div>
+                                  <div className="border-b border-dashed border-slate-600 h-6"></div>
+                                  <div className="border-b border-dashed border-slate-600 h-6"></div>
+                                  <div className="border-b border-dashed border-slate-600 h-6"></div>
+                                </div>
                               </div>
                             )}
 

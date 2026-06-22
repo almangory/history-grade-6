@@ -4,8 +4,10 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { UNITS, QUESTIONS, BADGES_LIST } from "./data";
 import { QuestionType, Unit, Question } from "./types";
+import { generateDynamicQuestions } from "./utils/questionGenerator";
 import { playSound } from "./components/SoundEffects";
 import { SVGIllustration } from "./components/SVGIllustrations";
 import { MapExplorer } from "./components/MapExplorer";
@@ -188,6 +190,8 @@ export default function App() {
   const [isEditingMedia, setIsEditingMedia] = useState(false);
   const [mediaUrlInput, setMediaUrlInput] = useState("");
   const [mediaTypeInput, setMediaTypeInput] = useState<"image" | "video" | "gif" | "drive">("image");
+  const [mediaPasswordInput, setMediaPasswordInput] = useState("");
+  const [mediaPasswordError, setMediaPasswordError] = useState("");
 
   // Save customized media to localStorage
   useEffect(() => {
@@ -312,6 +316,17 @@ export default function App() {
 
   const handleSaveCustomMedia = (lessonId: string) => {
     handlePlaySound("click");
+    
+    // Validate Password
+    if (mediaPasswordInput !== "20302060") {
+      handlePlaySound("fail");
+      setMediaPasswordError("كلمة المرور غير صحيحة! يرجى إدخال الباسويرد المعتمد لغرض الحفظ والتأمين 🔒");
+      return;
+    }
+
+    setMediaPasswordError("");
+    setMediaPasswordInput("");
+
     if (!mediaUrlInput.trim()) {
       const updated = { ...customMedia };
       delete updated[lessonId];
@@ -352,6 +367,8 @@ export default function App() {
 
   const handleStartEditingMedia = (lessonId: string) => {
     handlePlaySound("click");
+    setMediaPasswordInput("");
+    setMediaPasswordError("");
     const existing = customMedia[lessonId];
     if (existing) {
       setMediaUrlInput(existing.url);
@@ -443,6 +460,8 @@ export default function App() {
   const [quizIdx, setQuizIdx] = useState(0);
   const [quizCorrectAnswers, setQuizAnswersCount] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [essayAnswerText, setEssayAnswerText] = useState("");
+  const [essayChecked, setEssayChecked] = useState(false);
   const [answeredQuestionInGroup, setAnsweredQuestionInGroup] = useState<Record<string, { userOption: string, correct: boolean }>>({});
   const [speedrunTimer, setSpeedrunTimer] = useState(15);
   const [activeSpeedrunStatement, setActiveSpeedrunStatement] = useState<Question | null>(null);
@@ -619,46 +638,30 @@ export default function App() {
   }) => {
     handlePlaySound("click");
     
-    // 1. Gather pool of questions
-    let pool: Question[] = [];
     let titleText = "";
-    
     if (config.type === "comprehensive") {
-      pool = [...QUESTIONS];
       titleText = "الامتحان النهائي الشامل لكامل كتاب التاريخ";
     } else if (config.type === "unit") {
       const matchUnit = UNITS.find(u => u.id === config.unitId);
-      pool = QUESTIONS.filter(q => q.unitId === config.unitId);
       titleText = `الاختبار النهائي للوحدة: ${matchUnit ? matchUnit.title : ""}`;
     } else if (config.type === "lesson") {
-      pool = QUESTIONS.filter(q => q.lessonId === config.lessonId);
       titleText = `اختبار فهم الدرس: ${config.lessonTitle || ""}`;
     }
-    
-    // Filter by type if speedrun or match
-    if (config.challengeType === "speedrun") {
-      pool = pool.filter(q => q.type === QuestionType.TRUE_FALSE);
-      if (pool.length === 0) {
-        // Fallback to general True/False
-        pool = QUESTIONS.filter(q => q.type === QuestionType.TRUE_FALSE);
-      }
-    } else if (config.challengeType === "match") {
-      pool = pool.filter(q => q.type === QuestionType.MATCH);
-      if (pool.length === 0) {
-        // Fallback to general Match
-        pool = QUESTIONS.filter(q => q.type === QuestionType.MATCH);
-      }
-    }
-    
-    if (pool.length === 0) {
-      pool = [...QUESTIONS];
-    }
-    
-    // Shuffle pool
-    const shuffled = [...pool].sort(() => Math.random() - 0.5);
-    
-    // Slice to the requested question count
-    const selected = shuffled.slice(0, Math.min(config.questionCount, shuffled.length));
+
+    const typesSelected = {
+      mcq: config.challengeType === "mcq",
+      tf: config.challengeType === "mcq" || config.challengeType === "speedrun",
+      blank: config.challengeType === "mcq",
+      match: config.challengeType === "match",
+      essay: config.challengeType === "mcq" // Put essays in standard MCQ mode
+    };
+
+    const selected = generateDynamicQuestions(config.questionCount, {
+      type: config.type,
+      unitId: config.unitId,
+      lessonId: config.lessonId,
+      typesSelected
+    });
     
     if (selected.length === 0) {
       return;
@@ -669,6 +672,8 @@ export default function App() {
     setQuizIdx(0);
     setQuizAnswersCount(0);
     setSelectedOption(null);
+    setEssayAnswerText("");
+    setEssayChecked(false);
     setAnsweredQuestionInGroup({});
     setQuizType(config.type);
     
@@ -768,6 +773,8 @@ export default function App() {
   const handleNextQuiz = () => {
     handlePlaySound("click");
     setSelectedOption(null);
+    setEssayAnswerText("");
+    setEssayChecked(false);
     if (quizIdx + 1 < quizQuestions.length) {
       setQuizIdx(prev => prev + 1);
     } else {
@@ -1689,282 +1696,342 @@ export default function App() {
                 </div>
 
                 <div className="lg:col-span-2 space-y-6">
-                  {/* Current Selected Lesson Details */}
-                  <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 shadow p-6 md:p-8 space-y-6">
-                    <div className="border-b border-indigo-950 pb-4 flex items-center justify-between">
-                      <div>
-                        <span className="text-amber-500 text-xs font-bold uppercase block tracking-wider font-sans">الفصل {currentLessonIdx + 1}</span>
-                        <h3 className="text-2xl font-bold font-serif text-slate-100 mt-1">{selectedUnit.lessons[currentLessonIdx].title}</h3>
-                      </div>
-                      <button
-                        onClick={() => {
-                          onToggleFavoriteLesson(selectedUnit.lessons[currentLessonIdx].id);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
-                          favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id)
-                            ? "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20"
-                            : "bg-[#18152c]/50 border-indigo-950/50 text-slate-400 hover:text-slate-200"
-                        }`}
-                        title={favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "إزالة من المفضلة" : "إضافة للمفضلة"}
+                  {/* Current Selected Lesson Details - Real Book with Page Flipping features */}
+                  <div className="relative bg-[#FAF6EE] text-[#2c221a] rounded-3xl border-4 border-[#3e2e21] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col pt-3 pb-6 md:pb-8 ring-8 ring-amber-950/20">
+                    
+                    {/* Page flipper transition frame */}
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={currentLessonIdx}
+                        initial={{ opacity: 0, rotateY: 10, scale: 0.98, transformOrigin: "right center" }}
+                        animate={{ opacity: 1, rotateY: 0, scale: 1 }}
+                        exit={{ opacity: 0, rotateY: -10, scale: 0.98, transformOrigin: "left center" }}
+                        transition={{ duration: 0.4, ease: "easeInOut" }}
+                        className="grid grid-cols-1 md:grid-cols-2 relative h-full"
                       >
-                        <Heart className={`w-3.5 h-3.5 ${favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "fill-red-500 text-red-500" : ""}`} />
-                        <span>{favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "في المفضلة ❤️" : "تفضيل المادة 🤍"}</span>
-                      </button>
-                    </div>
+                        {/* Realistic book binding center spine and inner shadows */}
+                        <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -ml-[2px] w-[4px] bg-gradient-to-r from-black/15 via-[#423325]/30 to-black/15 shadow-xl z-20 pointer-events-none"></div>
+                        <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -ml-8 w-16 bg-gradient-to-r from-transparent via-black/[0.04] to-transparent pointer-events-none z-10"></div>
 
-                    {/* الحكواتي الصوتي لقراءة الدرس */}
-                    <div className="bg-gradient-to-l from-[#2c1d2c]/65 to-[#121020]/90 border border-amber-900/40 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
-                      <div className="flex items-center gap-3.5 w-full md:w-auto">
-                        <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 border-2 border-amber-400 shadow flex items-center justify-center text-2xl shrink-0 ${isSpeaking && !isPaused ? "animate-bounce" : ""}`}>
-                          👳‍♂️
-                        </div>
-                        <div className="text-right">
-                          <h4 className="text-sm font-bold font-serif text-amber-300 flex items-center gap-1.5 justify-end">
-                            <span>الحَكَواتي السُّودانِي الْمُثَقَّف 🎧</span>
-                            {isSpeaking && !isPaused && (
-                              <span className="flex gap-0.5 items-end h-3 w-5 justify-end">
-                                <span className="w-1 bg-amber-400 h-2 animate-pulse rounded-full"></span>
-                                <span className="w-1 bg-amber-400 h-3 animate-pulse rounded-full"></span>
-                                <span className="w-1 bg-amber-400 h-1 animate-pulse rounded-full"></span>
-                              </span>
-                            )}
-                          </h4>
-                          <p className="text-[11px] text-slate-300 leading-snug">اطلب من الحكواتي تلاوة الدرس بنبرة واضحة ومخارج حروف متقنة لتسهيل الحفظ والتركيز.</p>
-                        </div>
-                      </div>
+                        {/* ==================== RIGHT PAGE (Book Right Cover & Metadata & Audio Reader) ==================== */}
+                        <div className="md:border-l md:border-[#ebdcb4] p-6 md:p-8 flex flex-col justify-between space-y-6 relative">
+                          {/* Page Bookmark Tag */}
+                          <div className="absolute top-0 right-8 bg-[#3e2e21] text-[#FAF6EE] text-[9px] px-2 py-1 rounded-b-md shadow font-bold tracking-wider select-none">
+                            التاريخ المنهجي 🇸🇩
+                          </div>
 
-                      <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:justify-end">
-                        {/* Voice selection */}
-                        {availableVoices.length > 0 && (
-                          <select
-                            value={selectedVoice?.name || ""}
-                            onChange={(e) => {
-                              const v = availableVoices.find(voice => voice.name === e.target.value);
-                              if (v) setSelectedVoice(v);
-                            }}
-                            className="bg-[#151121] text-xs text-amber-200 border border-indigo-950/70 p-1.5 rounded-lg font-serif outline-none"
-                          >
-                            {availableVoices.filter(v => v.lang.startsWith("ar")).map(voice => (
-                              <option key={voice.name} value={voice.name}>
-                                {voice.name} {voice.lang === "ar-EG" ? "🇪🇬" : voice.lang === "ar-SA" ? "🇸🇦" : "🌐"}
-                              </option>
-                            ))}
-                            {availableVoices.filter(v => !v.lang.startsWith("ar")).slice(0, 3).map(voice => (
-                              <option key={voice.name} value={voice.name}>
-                                {voice.name} ({voice.lang})
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                          <div className="space-y-5">
+                            {/* Page Header */}
+                            <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
+                              <span className="text-[10px] font-bold text-[#8a7250] tracking-wider font-sans select-none">المنهج السوداني المعتمد 📖</span>
+                              <span className="text-[10px] font-bold text-[#8a7250] select-none">صفحة {currentLessonIdx * 2 + 1}</span>
+                            </div>
 
-                        {/* Speed Select */}
-                        <select
-                          value={speechRate}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            setSpeechRate(value);
-                          }}
-                          className="bg-[#151121] text-xs text-amber-200 border border-indigo-950/70 p-1.5 rounded-lg font-serif outline-none"
-                          title="سرعة تلاوة الحكواتي"
-                        >
-                          <option value={0.8}>بطيء جداً (0.8x)</option>
-                          <option value={1.0}>السرعة العادية (1.0x)</option>
-                          <option value={1.25}>سريع قليلاً (1.25x)</option>
-                          <option value={1.5}>سريع (1.5x)</option>
-                        </select>
+                            {/* Lesson Title Section */}
+                            <div className="space-y-2">
+                              <span className="text-amber-700 text-xs font-bold block select-none">الفصل {currentLessonIdx + 1}</span>
+                              <h3 className="text-xl md:text-2xl font-bold font-serif text-[#1e150b] tracking-tight leading-snug">{selectedUnit.lessons[currentLessonIdx].title}</h3>
+                            </div>
 
-                        {/* Play / Pause / Stop controls */}
-                        <div className="flex items-center gap-1">
-                          {!isSpeaking ? (
-                            <button
-                              onClick={() => startSpeakingAll(selectedUnit.lessons[currentLessonIdx].content)}
-                              className="bg-amber-600 hover:bg-amber-500 text-amber-950 hover:text-black font-bold px-4 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-amber-500 shadow-lg cursor-pointer transition-colors animate-pulse"
-                            >
-                              <Volume1 className="w-3.5 h-3.5" />
-                              <span>استمع للدرس 🎙️</span>
-                            </button>
-                          ) : (
-                            <>
-                              {isPaused ? (
+                            {/* Custom media or illustrative elements */}
+                            <div className="space-y-2">
+                              {renderLessonMedia(selectedUnit.lessons[currentLessonIdx].id, selectedUnit.lessons[currentLessonIdx].illustration)}
+                              
+                              <div className="flex items-center justify-between">
                                 <button
-                                  onClick={resumeSpeaking}
-                                  className="bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors"
-                                  title="استئناف القراءة"
+                                  onClick={() => handleStartEditingMedia(selectedUnit.lessons[currentLessonIdx].id)}
+                                  className="text-[10px] text-amber-900 font-bold hover:text-amber-700 transition flex items-center gap-1 bg-[#eae0bf]/50 px-2 py-1 rounded-lg border border-[#e6daae] cursor-pointer"
                                 >
-                                  <Play className="w-3.5 h-3.5" />
-                                  <span>أكمل</span>
+                                  <Settings className="w-3 h-3 text-[#3e2e21]" />
+                                  <span>{customMedia[selectedUnit.lessons[currentLessonIdx].id] ? "تعديل رابط الصورة المخصصة 🎨" : "إضافة صورة متحركة أو فيديو أو رابط درايف لهذا الدرس 🔗"}</span>
                                 </button>
-                              ) : (
-                                <button
-                                  onClick={pauseSpeaking}
-                                  className="bg-amber-800 hover:bg-amber-700 text-amber-100 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors"
-                                  title="إيقاف مؤقت"
-                                >
-                                  <Pause className="w-3.5 h-3.5" />
-                                  <span>مؤقت</span>
-                                </button>
+                                {customMedia[selectedUnit.lessons[currentLessonIdx].id] && (
+                                  <button
+                                    onClick={() => handleResetCustomMedia(selectedUnit.lessons[currentLessonIdx].id)}
+                                    className="text-[10px] text-red-700 hover:text-red-600 font-bold flex items-center gap-0.5 cursor-pointer"
+                                    title="استعادة الصورة الأصلية"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>حذف التخصيص 🚫</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {isEditingMedia && (
+                                <div className="bg-[#f0e8cb] border border-[#ebdcb4] p-3 rounded-xl space-y-3 font-sans text-right animate-[fadeIn_0.3s_ease]">
+                                  <div className="space-y-0.5">
+                                    <h5 className="text-[11px] font-bold text-amber-950">تخصيص وسائط الدرس 🎨</h5>
+                                    <p className="text-[9px] text-[#5e4f3c]">أي رابط صورة مباشرة، صورة متحركة GIF، فيديو، رابط يوتيوب أو Google Drive (يتم حفظه تلقائياً لنمط الإطار المستديم).</p>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] text-amber-950 block select-none">رابط الوسائط (URL):</label>
+                                    <input
+                                      type="text"
+                                      value={mediaUrlInput}
+                                      onChange={(e) => setMediaUrlInput(e.target.value)}
+                                      placeholder="https://example.com/image.gif أو رابط قوقل درايف..."
+                                      dir="ltr"
+                                      className="w-full text-[10px] p-2 rounded-lg bg-[#FAF6EE] border border-[#e6daae] text-slate-900 placeholder-[#9c9172] focus:outline-none focus:border-amber-600 text-left"
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-3 gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setMediaTypeInput("image")}
+                                      className={`px-2 py-1 rounded text-[9px] transition border cursor-pointer ${mediaTypeInput === "image" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
+                                    >
+                                      صورة / GIF ثابت
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setMediaTypeInput("video")}
+                                      className={`px-2 py-1 rounded-[9px] text-[9px] transition border cursor-pointer ${mediaTypeInput === "video" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
+                                    >
+                                      فيديو مباشر / يوتيوب
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setMediaTypeInput("drive")}
+                                      className={`px-2 py-1 rounded-[9px] text-[9px] transition border cursor-pointer ${mediaTypeInput === "drive" ? "bg-[#3e2e21] text-[#FAF6EE] border-transparent" : "bg-[#f5ebd1] border-[#ebdcb4] text-amber-950"}`}
+                                    >
+                                      مستند قوقل درايف
+                                    </button>
+                                  </div>
+
+                                  <div className="space-y-1 pt-0.5">
+                                    <label className="text-[10px] text-amber-950 font-bold block select-none text-right">كلمة المرور لتأكيد حفظ وحماية التخصيص 🔒:</label>
+                                    <input
+                                      type="password"
+                                      value={mediaPasswordInput}
+                                      onChange={(e) => setMediaPasswordInput(e.target.value)}
+                                      placeholder="أدخل كلمة المرور السرية (المطلوبة للحفظ)..."
+                                      className="w-full text-xs p-2 rounded-lg bg-[#FAF6EE] border border-[#e6daae] text-black placeholder-slate-400 focus:outline-none focus:border-amber-600 text-center outline-none"
+                                    />
+                                    {mediaPasswordError && (
+                                      <p className="text-[9px] text-red-700 font-bold text-center">{mediaPasswordError}</p>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center justify-end gap-1.5 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsEditingMedia(false)}
+                                      className="bg-[#faf6ee] hover:bg-[#eae0bf] text-slate-700 px-3 py-1 rounded text-[10px] transition border border-[#cbdcb3] cursor-pointer"
+                                    >
+                                      إلغاء
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveCustomMedia(selectedUnit.lessons[currentLessonIdx].id)}
+                                      className="bg-amber-700 hover:bg-amber-800 text-white px-3 py-1 rounded text-[10px] transition border border-transparent font-bold cursor-pointer"
+                                    >
+                                      حفظ الرابط 💾
+                                    </button>
+                                  </div>
+                                </div>
                               )}
+                            </div>
 
-                              <button
-                                onClick={stopSpeaking}
-                                className="bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors"
-                                title="إيقاف كلي"
-                              >
-                                <span className="w-2.5 h-2.5 bg-white rounded-sm shrink-0"></span>
-                                <span>قطع</span>
-                              </button>
-                            </>
-                          )}
+                            {/* Al-Hakawati Panel styled to match the antique book page */}
+                            <div className="bg-[#f0e8cc] border border-[#e2d5ab]/70 rounded-xl p-3.5 flex flex-col space-y-3 shadow-inner text-right select-none">
+                              <div className="flex items-center gap-2.5">
+                                <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-300 flex items-center justify-center text-xl shrink-0 ${isSpeaking && !isPaused ? "animate-bounce" : ""}`}>
+                                  👳‍♂️
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="text-xs font-bold font-serif text-[#1e150b] flex items-center gap-1 justify-end">
+                                    <span>الحَكَواتي السُّودانِي الْمُثَقَّف 🎧</span>
+                                    {isSpeaking && !isPaused && (
+                                      <span className="flex gap-0.5 items-end h-2 w-4">
+                                        <span className="w-0.5 bg-amber-900 h-1.5 animate-pulse rounded-full"></span>
+                                        <span className="w-0.5 bg-amber-900 h-2.5 animate-pulse rounded-full"></span>
+                                        <span className="w-0.5 bg-amber-900 h-1 animate-pulse rounded-full"></span>
+                                      </span>
+                                    )}
+                                  </h4>
+                                  <p className="text-[10px] text-[#5e4f3c] leading-snug">استمع للتلاوة المنهجية الفصيحة للتركيز والحفظ.</p>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                                {availableVoices.length > 0 && (
+                                  <select
+                                    value={selectedVoice?.name || ""}
+                                    onChange={(e) => {
+                                      const v = availableVoices.find(voice => voice.name === e.target.value);
+                                      if (v) setSelectedVoice(v);
+                                    }}
+                                    className="bg-[#FAF6EE] text-[10px] text-amber-950 border border-[#e6daae] p-1 rounded-lg font-serif outline-none"
+                                  >
+                                    {availableVoices.filter(v => v.lang.startsWith("ar")).map(voice => (
+                                      <option key={voice.name} value={voice.name}>
+                                        {voice.name} {voice.lang === "ar-EG" ? "🇪🇬" : voice.lang === "ar-SA" ? "🇸🇦" : "🌐"}
+                                      </option>
+                                    ))}
+                                    {availableVoices.filter(v => !v.lang.startsWith("ar")).slice(0, 3).map(voice => (
+                                      <option key={voice.name} value={voice.name}>
+                                        {voice.name} ({voice.lang})
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+
+                                <select
+                                  value={speechRate}
+                                  onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
+                                  className="bg-[#FAF6EE] text-[10px] text-amber-950 border border-[#e6daae] p-1 rounded-lg font-serif outline-none"
+                                >
+                                  <option value={0.8}>بطيء (0.8x)</option>
+                                  <option value={1.0}>عادي (1.0x)</option>
+                                  <option value={1.25}>سريع (1.25x)</option>
+                                </select>
+
+                                <div className="flex items-center gap-1">
+                                  {!isSpeaking ? (
+                                    <button
+                                      onClick={() => startSpeakingAll(selectedUnit.lessons[currentLessonIdx].content)}
+                                      className="bg-amber-800 hover:bg-amber-900 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] flex items-center gap-1 border border-transparent shadow shadow-amber-900/10 cursor-pointer transition-all animate-pulse"
+                                    >
+                                      <Volume1 className="w-3.5 h-3.5" />
+                                      <span>اقرأ لي المنهج 🎙️</span>
+                                    </button>
+                                  ) : (
+                                    <>
+                                      {isPaused ? (
+                                        <button
+                                          onClick={resumeSpeaking}
+                                          className="bg-green-700 hover:bg-green-800 text-white font-bold px-2 py-1 rounded text-[10px] flex items-center gap-0.5 cursor-pointer"
+                                        >
+                                          <Play className="w-3 h-3" />
+                                          <span>استئناف</span>
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={pauseSpeaking}
+                                          className="bg-amber-700 hover:bg-amber-800 text-white font-bold px-2 py-1 rounded text-[10px] flex items-center gap-0.5 cursor-pointer"
+                                        >
+                                          <Pause className="w-3 h-3" />
+                                          <span>مؤقت</span>
+                                        </button>
+                                      )}
+
+                                      <button
+                                        onClick={stopSpeaking}
+                                        className="bg-red-750 hover:bg-red-800 text-white font-bold px-2 py-1 rounded text-[10px] flex items-center gap-0.5 cursor-pointer"
+                                      >
+                                        <span className="w-1.5 h-1.5 bg-white rounded-sm"></span>
+                                        <span>إيقاف</span>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Stamp Action at the end of Right Page */}
+                          <div className="flex items-center justify-between border-t border-[#e6daae]/80 pt-3 select-none">
+                            <button
+                              onClick={() => {
+                                handlePlaySound("click");
+                                onToggleFavoriteLesson(selectedUnit.lessons[currentLessonIdx].id);
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition border cursor-pointer ${
+                                favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id)
+                                  ? "bg-red-500/10 border-red-500/30 text-red-700 font-serif"
+                                  : "bg-[#e2d5ab]/30 border-[#cfc49c] text-amber-900 font-serif hover:bg-[#e2d5ab]/60"
+                              }`}
+                            >
+                              <Heart className={`w-3 h-3 ${favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "fill-red-700 text-red-700" : ""}`} />
+                              <span>{favoriteLessons.includes(selectedUnit.lessons[currentLessonIdx].id) ? "في مفضلتي ❤️" : "أضف للمفضلة 🤍"}</span>
+                            </button>
+                            <span className="text-[10px] text-[#8a7250] font-mono leading-none">مقرر التاريخ المنهجي</span>
+                          </div>
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Integrated custom synthesized SVG vector illustrations / custom dynamic media loader */}
-                    <div className="space-y-3">
-                      {renderLessonMedia(selectedUnit.lessons[currentLessonIdx].id, selectedUnit.lessons[currentLessonIdx].illustration)}
-                      
-                      <div className="flex items-center justify-between">
-                        <button
-                          onClick={() => handleStartEditingMedia(selectedUnit.lessons[currentLessonIdx].id)}
-                          className="text-xs text-amber-400 hover:text-amber-200 transition flex items-center gap-1.5 bg-[#17132a]/60 px-3 py-1.5 rounded-xl border border-indigo-950 cursor-pointer"
-                        >
-                          <Settings className="w-3.5 h-3.5" />
-                          <span>{customMedia[selectedUnit.lessons[currentLessonIdx].id] ? "تعديل رابط الصورة المخصصة 🎨" : "إضافة صورة متحركة أو فيديو أو رابط درايف لهذا الدرس 🔗"}</span>
-                        </button>
-                        {customMedia[selectedUnit.lessons[currentLessonIdx].id] && (
-                          <button
-                            onClick={() => handleResetCustomMedia(selectedUnit.lessons[currentLessonIdx].id)}
-                            className="text-xs text-red-400 hover:text-red-300 transition flex items-center gap-1 cursor-pointer"
-                            title="استعادة الصورة الأصلية"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>حذف التخصيص 🚫</span>
-                          </button>
-                        )}
-                      </div>
+                        {/* ==================== LEFT PAGE (Lesson Content & Golden Key Points) ==================== */}
+                        <div className="p-6 md:p-8 flex flex-col justify-between space-y-6 relative">
+                          <div className="space-y-5">
+                            {/* Page Header */}
+                            <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
+                              <span className="text-[10px] font-bold text-[#8a7250] select-none">صفحة {currentLessonIdx * 2 + 2}</span>
+                              <span className="text-[10px] font-bold text-[#8a7250] leading-none font-sans select-none">الفصل {currentLessonIdx + 1}: تفاصيل المعرفة</span>
+                            </div>
 
-                      {isEditingMedia && (
-                        <div className="bg-[#18152c] border border-indigo-950 p-4 rounded-xl space-y-4 font-sans text-right">
-                          <div className="space-y-1">
-                            <h5 className="text-xs font-bold text-amber-400">تخصيص وسائط الدرس 🎨</h5>
-                            <p className="text-[11px] text-slate-400">أي رابط صورة مباشرة، صورة متحركة GIF، فيديو، رابط يوتيوب أو Google Drive (يتم تحويله تلقائياً لنمط الإطار المستديم).</p>
+                            {/* Main Paragraphs Area with gorgeous ruled serif typography */}
+                            <div className="space-y-3.5 text-[#2c221a] font-serif text-sm md:text-base leading-relaxed text-right">
+                              {selectedUnit.lessons[currentLessonIdx].content.map((p, pIdx) => {
+                                const isReadingThis = currentSpeechParagraphIndex === pIdx && isSpeaking;
+                                return (
+                                  <div 
+                                    key={pIdx} 
+                                    className={`transition-all duration-300 p-3 rounded-lg ${
+                                      isReadingThis 
+                                        ? "bg-amber-950/10 border-r-4 border-amber-700 text-amber-950 font-bold scale-[1.01] shadow-sm ml-2 animate-[pulse_1.5s_infinite]" 
+                                        : "border-transparent text-[#2c221a]"
+                                    }`}
+                                  >
+                                    <p className="indent-4 leading-relaxed font-serif text-slate-800 text-sm md:text-[15px]">{p}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Dynamic Key points list printed as ruled notebook checklist */}
+                            <div className="bg-[#FAF8F5] border border-[#dcd6c1] p-4 rounded-xl space-y-2.5 shadow-inner">
+                              <span className="font-serif font-black text-[#1e150b] text-[11px] md:text-xs flex items-center gap-1 justify-end select-none">
+                                <span>أهَمُّ ملامِحِ الدَّرسِ لِلحفظِ السَّريع:</span>
+                                <Award className="w-3.5 h-3.5 text-amber-700 fill-amber-300/30" />
+                              </span>
+                              <ul className="space-y-1.5 text-[11px] md:text-xs text-[#3a3026]">
+                                {selectedUnit.lessons[currentLessonIdx].keyPoints.map((kp, kpIdx) => (
+                                  <li key={kpIdx} className="leading-relaxed text-right flex items-start justify-end gap-1.5 font-serif">
+                                    <span className="flex-1 text-[13px] text-slate-700">{kp}</span>
+                                    <span className="text-amber-700 font-bold select-none leading-none mt-0.5">✔</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           </div>
 
-                          <div className="space-y-2">
-                            <label className="text-xs text-slate-300 block select-none">رابط الوسائط (URL):</label>
-                            <input
-                              type="text"
-                              value={mediaUrlInput}
-                              onChange={(e) => setMediaUrlInput(e.target.value)}
-                              placeholder="مثال: https://example.com/image.gif أو رابط قوقل درايف..."
-                              dir="ltr"
-                              className="w-full text-xs p-2.5 rounded-lg bg-[#110e1e] border border-indigo-950 text-white placeholder-slate-600 focus:outline-none focus:border-amber-600 text-left"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setMediaTypeInput("image")}
-                              className={`px-3 py-1.5 rounded-lg text-xs transition border cursor-pointer ${mediaTypeInput === "image" ? "bg-amber-900/40 border-amber-500 text-amber-200" : "bg-[#151225] border-indigo-950/70 text-slate-400"}`}
-                            >
-                              صورة / GIF ثابت
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMediaTypeInput("video")}
-                              className={`px-3 py-1.5 rounded-lg text-xs transition border cursor-pointer ${mediaTypeInput === "video" ? "bg-amber-900/40 border-amber-500 text-amber-200" : "bg-[#151225] border-indigo-950/70 text-slate-400"}`}
-                            >
-                              فيديو مباشر / يوتيوب
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMediaTypeInput("drive")}
-                              className={`px-3 py-1.5 rounded-lg text-xs transition border cursor-pointer ${mediaTypeInput === "drive" ? "bg-amber-900/40 border-amber-500 text-amber-200" : "bg-[#151225] border-indigo-950/70 text-slate-400"}`}
-                            >
-                              مستند قوقل درايف
-                            </button>
-                          </div>
-
-                          <div className="flex items-center justify-end gap-2 pt-2">
-                            <button
-                              type="button"
-                              onClick={() => setIsEditingMedia(false)}
-                              className="bg-indigo-950/40 hover:bg-[#201c3e] text-slate-300 px-3 py-1.5 rounded-lg text-xs transition border border-indigo-950/50 cursor-pointer"
-                            >
-                              إلغاء
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSaveCustomMedia(selectedUnit.lessons[currentLessonIdx].id)}
-                              className="bg-amber-700 hover:bg-amber-600 text-white px-4 py-1.5 rounded-lg text-xs transition font-bold border border-amber-500 cursor-pointer shadow"
-                            >
-                              حفظ التغييرات 💾
-                            </button>
+                          {/* Footer Page numbers and bookmarks */}
+                          <div className="flex items-center justify-between border-t border-[#e6daae]/80 pt-3 select-none">
+                            <span className="text-[10px] text-[#8a7250] font-sans">تاريخ السودان الحديث 🇸🇩</span>
+                            <span className="text-[10px] text-[#8a7250] font-serif">الصف {selectedUnit.title}</span>
                           </div>
                         </div>
-                      )}
-                    </div>
+                      </motion.div>
+                    </AnimatePresence>
 
-                    <div className="space-y-4 text-slate-200 text-base leading-relaxed text-right md:text-justify font-serif">
-                      {selectedUnit.lessons[currentLessonIdx].content.map((p, pIdx) => {
-                        const isReadingThis = currentSpeechParagraphIndex === pIdx && isSpeaking;
-                        return (
-                          <div 
-                            key={pIdx} 
-                            className={`transition-all duration-300 p-2.5 rounded-xl border ${
-                              isReadingThis 
-                                ? "bg-amber-900/20 border-amber-600/40 text-amber-200 font-bold scale-[1.01] shadow-md shadow-amber-950/20" 
-                                : "border-transparent text-slate-200"
-                            }`}
-                          >
-                            <p>{p}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Key points box (أهم ما نستخلصه) */}
-                    <div className="bg-[#171120] border border-indigo-950/60 rounded-xl p-5 space-y-3">
-                      <span className="font-serif font-bold text-slate-100 text-sm flex items-center gap-1.5 justify-end">
-                        <span>أهَمُّ ملامِحِ الدَّرسِ لِلحفظِ السَّريع:</span>
-                        <Award className="w-4 h-4 text-amber-400 fill-amber-950" />
-                      </span>
-                      <ul className="space-y-2 text-xs md:text-sm text-slate-300 list-disc list-inside">
-                        {selectedUnit.lessons[currentLessonIdx].keyPoints.map((kp, kpIdx) => (
-                          <li key={kpIdx} className="leading-relaxed list-none text-right flex items-center justify-end gap-1 font-serif">
-                            <span>{kp}</span>
-                            <span className="text-amber-400 shrink-0 select-none font-bold">✔</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Footer navigate buttons inside lessons */}
-                    <div className="flex items-center justify-between border-t border-indigo-950/40 pt-4 shrink-0 font-sans">
+                    {/* Book controls row containing Lesson previous and next page-turning triggers */}
+                    <div className="flex items-center justify-between border-t border-[#ebdcb4] pt-4 px-6 md:px-8 shrink-0 font-sans mt-auto">
                       <button
                         disabled={currentLessonIdx === 0}
                         onClick={() => {
-                          handlePlaySound("click");
+                          handlePlaySound("levelup"); // Play page turn sound!
                           setCurrentLessonIdx(prev => prev - 1);
                         }}
-                        className="bg-[#1b1930] hover:bg-[#252244] disabled:opacity-50 text-slate-100 px-4 py-2 rounded-xl border border-indigo-900/40 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="bg-[#efe7cc] hover:bg-[#ebdcb4] active:bg-[#dfd4b3] disabled:opacity-30 disabled:pointer-events-none text-amber-950 px-4 py-2 rounded-xl border border-[#ebdcb4]/80 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
                       >
                         <ChevronRight className="w-4 h-4 transform rotate-180" />
-                        <span>الدرس السابق</span>
+                        <span>الدرس السابق 📖</span>
                       </button>
-                      <span className="text-xs font-bold text-slate-400 font-sans">
-                        {currentLessonIdx + 1} / {selectedUnit.lessons.length}
+                      
+                      <span className="text-xs font-black text-amber-900 bg-[#eae0bf]/50 border border-[#e2d5ab] px-3 py-1 rounded-full select-none font-sans shadow-inner">
+                        الدرس {currentLessonIdx + 1} من {selectedUnit.lessons.length}
                       </span>
+
                       <button
                         disabled={currentLessonIdx === selectedUnit.lessons.length - 1}
                         onClick={() => {
-                          handlePlaySound("click");
+                          handlePlaySound("levelup"); // Play page turn sound!
                           setCurrentLessonIdx(prev => prev + 1);
                         }}
-                        className="bg-amber-800 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="bg-amber-800 hover:bg-amber-900 active:bg-amber-950 disabled:opacity-30 disabled:pointer-events-none text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
                       >
-                        <span>الدرس التالي</span>
+                        <span>قلب الصفحة 📖</span>
                         <ChevronLeft className="w-4 h-4 transform rotate-180" />
                       </button>
                     </div>
@@ -2469,39 +2536,122 @@ export default function App() {
                       {quizQuestions[quizIdx].text}
                     </p>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Render statement option values based on MCQ or Yes/No */}
-                      {(quizQuestions[quizIdx].options || ["صواب", "خطأ"]).map((option, oIdx) => {
-                        const isSelected = selectedOption === option;
-                        const isCorrectAnswer = option === quizQuestions[quizIdx].correctAnswer;
+                    {quizQuestions[quizIdx].type === QuestionType.ESSAY ? (
+                      <div className="w-full text-right space-y-4">
+                        <label className="text-sm text-slate-300 font-serif block">صياغتك للموضوع (مقال تاريخي مبسط):</label>
+                        <textarea
+                          disabled={essayChecked}
+                          value={essayAnswerText}
+                          onChange={(e) => setEssayAnswerText(e.target.value)}
+                          placeholder="ابدأ في تدوين مقالتك التاريخية وصياغة الحقائق بأسلوبك لتنمي كفاءتك (مثال: قادة الحملة، موقع المعركة، تتابع الأحداث والأصداء)..."
+                          className="w-full h-40 p-4 rounded-xl bg-[#18152c] border border-indigo-950 text-slate-100 text-right focus:outline-none focus:border-amber-500 leading-relaxed text-sm font-serif outline-none"
+                        />
                         
-                        let optStyle = "bg-[#18152c] hover:bg-[#221e3f] border-indigo-950 text-slate-200 hover:scale-[1.01] cursor-pointer";
-                        if (selectedOption) {
-                          if (isCorrectAnswer) {
-                            optStyle = "bg-emerald-950/80 border-emerald-500 text-emerald-300 scale-[1.01] font-bold";
-                          } else if (isSelected) {
-                            optStyle = "bg-red-950/80 border-red-500 text-red-350";
-                          } else {
-                            optStyle = "bg-[#121020] border-indigo-950/20 text-slate-400/80 opacity-70 cursor-not-allowed";
-                          }
-                        }
-
-                        return (
+                        {!essayChecked ? (
                           <button
-                            key={oIdx}
-                            disabled={!!selectedOption}
-                            onClick={() => handleAnswerSelection(option)}
-                            className={`w-full text-right p-4 rounded-xl border text-sm font-bold transition flex items-center justify-between ${optStyle}`}
+                            disabled={!essayAnswerText.trim()}
+                            onClick={() => {
+                              setEssayChecked(true);
+                              setQuizAnswersCount(prev => prev + 1);
+                              handlePlaySound("success");
+                              setSelectedOption("checked");
+                            }}
+                            className="bg-amber-700 hover:bg-amber-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition shadow border border-amber-500/30"
                           >
-                            <span>{option}</span>
-                            {selectedOption && isCorrectAnswer && <span className="text-emerald-400 text-xs font-semibold">✔ صواب</span>}
-                            {selectedOption && isSelected && !isCorrectAnswer && <span className="text-red-400 text-xs font-semibold">✘ خطأ</span>}
+                            <span>تأكيد وإظهار المقارنة النموذجية 🔍</span>
                           </button>
-                        );
-                      })}
-                    </div>
+                        ) : (
+                          <div className="space-y-3 bg-[#110e1d] p-4 rounded-xl border border-amber-900/35 leading-relaxed text-right animate-[fadeIn_0.5s_ease-out]">
+                            <h5 className="text-sm font-bold text-amber-400 font-serif border-b border-amber-950 pb-1.5 flex items-center gap-1.5 justify-end">
+                              <span>الإجابة المقالية النموذجية المعتمدة 📜</span>
+                            </h5>
+                            
+                            <p className="text-[13px] text-slate-200 whitespace-pre-wrap font-serif leading-relaxed">
+                              {quizQuestions[quizIdx].correctAnswer}
+                            </p>
+                            
+                            <div className="bg-[#1b251d] text-emerald-300 text-xs p-3 rounded-lg border border-emerald-900 leading-snug flex items-center gap-2 justify-end">
+                              <span>لقد أحرزت نقاطاً تقديراً لمحاولتك التاريخية والإنتاج الكتابي المدرسي! 🌟</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : quizQuestions[quizIdx].type === QuestionType.FILL_BLANK ? (
+                      <div className="w-full text-right space-y-4">
+                        <label className="text-sm text-slate-300 font-serif block">اكتب الكلمة أو العبارة التاريخية الناقصة:</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            disabled={!!selectedOption}
+                            value={essayAnswerText}
+                            onChange={(e) => setEssayAnswerText(e.target.value)}
+                            placeholder="اكتب الإجابة هنا..."
+                            className="flex-1 p-3.5 rounded-xl bg-[#18152c] border border-indigo-950 text-slate-100 text-right focus:outline-none focus:border-amber-500 font-serif outline-none"
+                          />
+                          <button
+                            disabled={!essayAnswerText.trim() || !!selectedOption}
+                            onClick={() => {
+                              setSelectedOption(essayAnswerText);
+                              const isCorrect = essayAnswerText.trim() === quizQuestions[quizIdx].correctAnswer.trim();
+                              if (isCorrect) {
+                                handlePlaySound("success");
+                                setQuizAnswersCount(prev => prev + 1);
+                              } else {
+                                handlePlaySound("fail");
+                              }
+                            }}
+                            className="bg-amber-700 hover:bg-amber-600 font-bold px-6 py-2.5 rounded-xl text-white border border-amber-500 cursor-pointer text-xs"
+                          >
+                            تحقق 🔍
+                          </button>
+                        </div>
+                        
+                        {selectedOption && (
+                          <div className={`p-3.5 rounded-xl border font-serif text-sm ${
+                            selectedOption.trim() === quizQuestions[quizIdx].correctAnswer.trim()
+                              ? "bg-emerald-950/40 border-emerald-500 text-emerald-350"
+                              : "bg-red-950/40 border-red-500 text-red-350"
+                          }`}>
+                            <p>إجابتك: {selectedOption}</p>
+                            <p className="mt-1 font-bold">الإجابة الصحيحة المقررة: {quizQuestions[quizIdx].correctAnswer}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Render statement option values based on MCQ or Yes/No */}
+                        {(quizQuestions[quizIdx].options || ["صواب", "خطأ"]).map((option, oIdx) => {
+                          const isSelected = selectedOption === option;
+                          const isCorrectAnswer = option === quizQuestions[quizIdx].correctAnswer;
+                          
+                          let optStyle = "bg-[#18152c] hover:bg-[#221e3f] border-indigo-950 text-slate-200 hover:scale-[1.01] cursor-pointer";
+                          if (selectedOption) {
+                            if (isCorrectAnswer) {
+                              optStyle = "bg-emerald-950/80 border-emerald-500 text-emerald-300 scale-[1.01] font-bold";
+                            } else if (isSelected) {
+                              optStyle = "bg-red-950/80 border-red-500 text-red-350";
+                            } else {
+                              optStyle = "bg-[#121020] border-indigo-950/20 text-slate-400/80 opacity-70 cursor-not-allowed";
+                            }
+                          }
 
-                    {selectedOption && (
+                          return (
+                            <button
+                              key={oIdx}
+                              disabled={!!selectedOption}
+                              onClick={() => handleAnswerSelection(option)}
+                              className={`w-full text-right p-4 rounded-xl border text-sm font-bold transition flex items-center justify-between ${optStyle}`}
+                            >
+                              <span>{option}</span>
+                              {selectedOption && isCorrectAnswer && <span className="text-emerald-400 text-xs font-semibold">✔ صواب</span>}
+                              {selectedOption && isSelected && !isCorrectAnswer && <span className="text-red-400 text-xs font-semibold">✘ خطأ</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {selectedOption && quizQuestions[quizIdx].type !== QuestionType.ESSAY && quizQuestions[quizIdx].type !== QuestionType.FILL_BLANK && (
                       <div className="bg-[#171120] p-4 rounded-xl border border-indigo-950/65 animate-[fadeIn_0.5s_ease-out] text-right space-y-1.5 shrink-0 font-serif">
                         <span className="text-amber-400 font-bold block text-sm">💡 الشرح والتبسيط من منهج الصف السَّادس:</span>
                         <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
