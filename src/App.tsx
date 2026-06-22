@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { UNITS, QUESTIONS, BADGES_LIST } from "./data";
 import { QuestionType, Unit, Question } from "./types";
 import { generateDynamicQuestions } from "./utils/questionGenerator";
+import { LessonCalmBackground } from "./components/LessonCalmBackground";
 import { playSound } from "./components/SoundEffects";
 import { SVGIllustration } from "./components/SVGIllustrations";
 import { MapExplorer } from "./components/MapExplorer";
@@ -44,7 +45,12 @@ import {
   Clock,
   Sun,
   Moon,
-  Play
+  Play,
+  Users,
+  Copy,
+  Lock,
+  Unlock,
+  Check
 } from "lucide-react";
 import { Pause, Settings, Trash2, Image, Video, Radio, Volume1, X, Maximize2, Minimize2 } from "lucide-react";
 
@@ -52,6 +58,57 @@ export default function App() {
   // Firebase Auth states
   const [currentUser, setCurrentUser] = React.useState<any>(null);
   const [loadingAuth, setLoadingAuth] = React.useState<boolean>(true);
+
+  // Connection & Offline States
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    if (typeof navigator !== "undefined") {
+      return navigator.onLine;
+    }
+    return true;
+  });
+  const [offlineModeSimulated, setOfflineModeSimulated] = useState<boolean>(false);
+
+  // Last Quiz Results State
+  const [lastQuizResult, setLastQuizResult] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem("sub_historian_last_quiz_result");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Parent Verification and Control panel states
+  const [isParentUnlocked, setIsParentUnlocked] = useState<boolean>(false);
+  const [parentMathQuestion] = useState<{ q: string; a: number }>(() => {
+    const nums = [
+      { q: "6 × 8", a: 48 },
+      { q: "7 × 9", a: 63 },
+      { q: "8 × 8", a: 64 },
+      { q: "5 × 9", a: 45 },
+      { q: "9 × 6", a: 54 }
+    ];
+    return nums[Math.floor(Math.random() * nums.length)];
+  });
+  const [parentAnswerInput, setParentAnswerInput] = useState<string>("");
+  const [parentAnswerError, setParentAnswerError] = useState<string>("");
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (lastQuizResult) {
+      localStorage.setItem("sub_historian_last_quiz_result", JSON.stringify(lastQuizResult));
+    }
+  }, [lastQuizResult]);
 
   // Game & User Progression States
   const [useSound, setUseSound] = useState(true);
@@ -103,6 +160,9 @@ export default function App() {
             setUserAvatar(data.avatar || "explorer");
             setScore(data.score ?? 100);
             setUnlockedBadges(data.unlockedBadges || []);
+            if (data.lastQuizResult) {
+              setLastQuizResult(data.lastQuizResult);
+            }
           } else {
             // New user login with Google - create profile in Firestore
             const defaultName = user.displayName || "بطل تاريخي";
@@ -145,6 +205,7 @@ export default function App() {
             avatar: userAvatar,
             score: score,
             unlockedBadges: unlockedBadges,
+            lastQuizResult: lastQuizResult || null,
             updatedAt: serverTimestamp()
           });
         } catch (error) {
@@ -157,12 +218,35 @@ export default function App() {
       }, 1500); // 1.5s debounce ensures we don't bombard Firestore with quick micro-updates
       return () => clearTimeout(timer);
     }
-  }, [userName, userAvatar, score, unlockedBadges, currentUser]);
+  }, [userName, userAvatar, score, unlockedBadges, lastQuizResult, currentUser]);
 
   // App Navigation States
   const [currentTab, setCurrentTab] = useState<"dashboard" | "unit" | "map" | "chat" | "quiz_hub" | "badges" | "worksheets">("dashboard");
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   
+  // Responsive layout detector (Tablets, landscape phones) & Calm BG
+  const [isBookWide, setIsBookWide] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth >= 640 || (window.innerWidth > window.innerHeight && window.innerHeight >= 360);
+    }
+    return true;
+  });
+  const [isCalmBGActive, setIsCalmBGActive] = useState<boolean>(true);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsBookWide(window.innerWidth >= 640 || (window.innerWidth > window.innerHeight && window.innerHeight >= 360));
+    };
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, []);
+
+
+
   // Lesson Inner Navigation States
   const [lessonActiveSubTab, setLessonActiveSubTab] = useState<"lessons" | "timeline" | "flashcards">("lessons");
   const [currentLessonIdx, setCurrentLessonIdx] = useState(0);
@@ -473,6 +557,64 @@ export default function App() {
 
   // Drag & Match Mini-Game States
   const [matchLeft, setMatchLeft] = useState<{ id: string, text: string }[]>([]);
+
+  // Back-button Interceptor for mobile devices
+  useEffect(() => {
+    // Navigate with browser history to intercept Android/Mobile back button behaviors
+    const pushStateSafely = (step: number) => {
+      try {
+        window.history.pushState({ step, app: "sub_historian" }, "");
+      } catch (e) {
+        console.warn("History pushState is disabled or restricted in iframe context:", e);
+      }
+    };
+
+    // Push initial entry state
+    pushStateSafely(1);
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (useSound) playSound("click");
+
+      // Case A: Inside an active quiz
+      if (quizMode !== "none") {
+        const confirmExit = window.confirm("هل تريد الخروج من الاختبار الحالي؟ لن يتم حفظ التقدم في هذا الامتحان.");
+        if (confirmExit) {
+          setQuizMode("none");
+        }
+        pushStateSafely(1);
+        return;
+      }
+
+      // Case B: Browsing lessons/units
+      if (currentTab === "unit") {
+        setCurrentTab("dashboard");
+        setSelectedUnitId(null);
+        pushStateSafely(1);
+        return;
+      }
+
+      // Case C: inside any other sub tab
+      if (currentTab !== "dashboard") {
+        setCurrentTab("dashboard");
+        pushStateSafely(1);
+        return;
+      }
+
+      // Case D: already on the dashboard home (prevent exiting accidentally without confirmation)
+      const confirmClose = window.confirm("هل تود حقاً الخروج من منصة المؤرخ الصغير وإغلاق الموقع؟");
+      if (confirmClose) {
+        // Exits standard history step
+        window.history.go(-1);
+      } else {
+        pushStateSafely(1);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [currentTab, quizMode]);
   const [matchRight, setMatchRight] = useState<{ id: string, text: string }[]>([]);
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [matchedPairs, setMatchedPairs] = useState<Record<string, string>>({}); // Mapping representing LeftID -> RightID
@@ -489,6 +631,13 @@ export default function App() {
   const [qhLessonId, setQhLessonId] = useState<string>("u1_l1");
   const [qhSize, setQhSize] = useState<number>(10);
   const [qhChallengeType, setQhChallengeType] = useState<"mcq" | "speedrun" | "match">("mcq");
+
+  // Custom Question Types filters
+  const [qhTypesMCQ, setQhTypesMCQ] = useState(true);
+  const [qhTypesTF, setQhTypesTF] = useState(true);
+  const [qhTypesBlank, setQhTypesBlank] = useState(true);
+  const [qhTypesMatch, setQhTypesMatch] = useState(true);
+  const [qhTypesEssay, setQhTypesEssay] = useState(true);
 
   // Sync lesson ID when Unit selection changes in Quiz Hub
   useEffect(() => {
@@ -652,12 +801,15 @@ export default function App() {
       titleText = `اختبار فهم الدرس: ${config.lessonTitle || ""}`;
     }
 
+    // Use selected custom values with safety fallback if everything is unchecked
+    const anyChecked = qhTypesMCQ || qhTypesTF || qhTypesBlank || qhTypesMatch || qhTypesEssay;
+
     const typesSelected = {
-      mcq: config.challengeType === "mcq",
-      tf: config.challengeType === "mcq" || config.challengeType === "speedrun",
-      blank: config.challengeType === "mcq",
-      match: config.challengeType === "match",
-      essay: config.challengeType === "mcq" // Put essays in standard MCQ mode
+      mcq: config.challengeType === "mcq" ? (anyChecked ? qhTypesMCQ : true) : false,
+      tf: config.challengeType === "speedrun" ? true : (config.challengeType === "mcq" ? (anyChecked ? qhTypesTF : true) : false),
+      blank: config.challengeType === "mcq" ? (anyChecked ? qhTypesBlank : true) : false,
+      match: config.challengeType === "match" ? true : (config.challengeType === "mcq" ? (anyChecked ? qhTypesMatch : true) : false),
+      essay: config.challengeType === "mcq" ? (anyChecked ? qhTypesEssay : true) : false
     };
 
     const selected = generateDynamicQuestions(config.questionCount, {
@@ -795,7 +947,48 @@ export default function App() {
           }
         }
       }
+
+      // Compile and save student answers for parental inspection
+      try {
+        const detailedQuestions = quizQuestions.map((q) => {
+          const logged = answeredQuestionInGroup[q.id] || { userOption: "لم يتم تقديم إجابة", correct: false };
+          return {
+            id: q.id,
+            text: q.text,
+            userAnswer: logged.userOption,
+            correctAnswer: q.correctAnswer,
+            isCorrect: logged.correct,
+            explanation: q.explanation || "الإجابة الصحيحة مبرهنة في كتاب التاريخ المدرسي للصف السادس الابتدائي بالسودان."
+          };
+        });
+
+        const formattedDate = new Date().toLocaleString("ar-SD", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true
+        });
+
+        const finalResult = {
+          score: quizCorrectAnswers,
+          total: quizQuestions.length,
+          percentage: Math.round(scorePercentage),
+          timestamp: formattedDate,
+          quizType: quizType,
+          quizTitle: quizTitle || "اختبار التاريخ التفاعلي",
+          questions: detailedQuestions
+        };
+
+        setLastQuizResult(finalResult);
+      } catch (e) {
+        console.error("Error setting quiz history: ", e);
+      }
+
       setSelectedOption(null);
+      // Advance quizIdx to quizQuestions.length to render the results completed card
+      setQuizIdx(quizQuestions.length);
     }
   };
 
@@ -1132,6 +1325,43 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* Offline Status & Simulated Mode Control Bar */}
+      <div className={`w-full py-2 text-center text-[11px] md:text-sm font-sans border-b flex flex-col sm:flex-row items-center justify-between gap-3 px-4 md:px-8 py-2 md:py-1.5 transition-all duration-300 ${
+        (isOnline && !offlineModeSimulated) 
+          ? "bg-[#102a18]/40 border-emerald-950/40 text-emerald-300" 
+          : "bg-[#2b1612]/50 border-rose-950/40 text-rose-300"
+      }`}>
+        <div className="flex items-center gap-1.5 flex-wrap justify-center sm:justify-start text-right">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+              (isOnline && !offlineModeSimulated) ? "bg-emerald-400" : "bg-rose-400"
+            }`}></span>
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+              (isOnline && !offlineModeSimulated) ? "bg-emerald-500" : "bg-rose-500"
+            }`}></span>
+          </span>
+          <span className="font-sans font-medium text-right leading-relaxed">
+            {(isOnline && !offlineModeSimulated) 
+              ? "مزامنة سحابية نشطة 🟢 - يمكنك المذاكرة وحل الاختبارات وسيتم حفظ تقدمك تلقائياً بقاعدة البيانات السحابية." 
+              : "وضع العمل بدون اتصال 📡 - جاري الحفظ محلياً بأمان! مستندات المنهج والخرائط والامتحانات تعمل 100% بلا شبكة."}
+          </span>
+        </div>
+        
+        <button
+          onClick={() => {
+            handlePlaySound("levelup");
+            setOfflineModeSimulated(!offlineModeSimulated);
+          }}
+          className={`px-3.5 py-1 rounded-full text-[10px] font-bold border transition cursor-pointer select-none shrink-0 ${
+            offlineModeSimulated 
+              ? "bg-emerald-800 hover:bg-emerald-700 text-white border-emerald-600 font-sans" 
+              : "bg-rose-950/40 hover:bg-rose-900/40 text-rose-200 border-rose-800/40 font-sans"
+          }`}
+        >
+          {offlineModeSimulated ? "إعادة الاتصال بالإنترنت 🌐" : "محاكاة خروج الإنترنت 🔌"}
+        </button>
+      </div>
 
       {/* Real-time Global Navigation Tabs */}
       <div className="bg-[#121020]/95 border-b border-indigo-950/60 sticky top-[73px] z-30 backdrop-blur-md px-4 shrink-0 transition select-none shadow">
@@ -1472,6 +1702,231 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* PARENTS INSPECTION CORNER */}
+            <div className="bg-[#121020] rounded-3xl border border-indigo-950/80 shadow-[0_4px_25px_rgba(0,0,0,0.3)] mt-8 overflow-hidden text-right">
+              {/* Header section with family icon */}
+              <div className="bg-gradient-to-r from-amber-950/35 to-indigo-950/40 p-5 md:p-6 border-b border-indigo-950/60 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="text-lg md:text-xl font-serif font-black text-amber-400 flex items-center gap-2 justify-end sm:justify-start">
+                    <span>ركن ولي الأمر والمتابعة الأسرية 👨‍👩‍👦</span>
+                    <Users className="w-5 h-5 text-amber-400 shrink-0" />
+                  </h3>
+                  <p className="text-xs text-slate-400 font-sans">
+                    مساحة آمنة مخصصة لآباء وأمهات الأبطال لمراجعة إجابات الامتحانات وقياس نتائج الاستيعاب الفعلي للمنهج.
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <span className="text-xs font-bold px-3 py-1 bg-amber-400/10 border border-amber-500/20 text-amber-300 rounded-full font-serif shrink-0">
+                    آخر اختبار ونتائجه 📝
+                  </span>
+                </div>
+              </div>
+
+              {/* Security unlock guard */}
+              {!isParentUnlocked ? (
+                <div className="p-6 md:p-8 flex flex-col items-center justify-center text-center space-y-4 max-w-lg mx-auto">
+                  <div className="p-4 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                    <Lock className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div className="space-y-1.5 md:space-y-2">
+                    <h4 className="text-sm md:text-md font-serif font-bold text-slate-100">بوابة التحقق الأمني لولي الأمر</h4>
+                    <p className="text-xs text-slate-400 max-w-sm leading-relaxed font-sans">
+                      لحماية خصوصية الطالب ومطالعة نتائج الامتحانات التفصيلية، يرجى حل سؤال التحقق الحسابي السريع التالي لفك شفرة القفل:
+                    </p>
+                  </div>
+
+                  <div className="bg-[#0e0c18] border border-indigo-950 rounded-2xl p-4 w-full flex items-center justify-between gap-3 font-sans">
+                    <span className="text-sm font-bold text-amber-300 font-serif">ما حاصل ضرب {parentMathQuestion.q}؟</span>
+                    
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={parentAnswerInput}
+                        onChange={(e) => {
+                          setParentAnswerInput(e.target.value);
+                          setParentAnswerError("");
+                        }}
+                        placeholder="النتيجة"
+                        className="w-20 p-2 text-center rounded-xl bg-[#1b1932] border border-indigo-900 focus:border-amber-500 text-white font-bold font-serif focus:outline-none outline-none text-xs"
+                      />
+                      <button
+                        onClick={() => {
+                          handlePlaySound("click");
+                          const answer = parseInt(parentAnswerInput, 10);
+                          if (answer === parentMathQuestion.a) {
+                            setIsParentUnlocked(true);
+                            handlePlaySound("success");
+                          } else {
+                            setParentAnswerError("إجابة حسابية غير صحيحة، حاول مجدداً لطفاً!");
+                            handlePlaySound("fail");
+                          }
+                        }}
+                        className="bg-amber-700 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-xl transition text-xs cursor-pointer text-center"
+                      >
+                        فك القفل 🔓
+                      </button>
+                    </div>
+                  </div>
+                  {parentAnswerError && (
+                    <p className="text-[11px] text-red-400 font-sans font-bold">{parentAnswerError}</p>
+                  )}
+                </div>
+              ) : (
+                // Full Inspection dashboard unlocked
+                <div className="p-6 md:p-8 space-y-6">
+                  {/* Option to re-lock */}
+                  <div className="flex justify-between items-center border-b border-indigo-950/40 pb-3">
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setIsParentUnlocked(false);
+                        setParentAnswerInput("");
+                      }}
+                      className="text-xs bg-[#19152b] hover:bg-rose-950/30 text-slate-400 hover:text-rose-300 border border-indigo-900 px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 font-sans"
+                    >
+                      <Unlock className="w-3.5 h-3.5" />
+                      <span>قفل بوابة المتابعة</span>
+                    </button>
+                    <span className="text-xs text-slate-450 font-sans">تم تسجيل الدخول لولي الأمر بنجاح ✅</span>
+                  </div>
+
+                  {!lastQuizResult ? (
+                    // Welcoming placeholder when no quizzes have been logged
+                    <div className="text-center py-10 space-y-3 max-w-sm mx-auto">
+                      <div className="p-4 rounded-full bg-indigo-950/40 border border-indigo-900/30 text-amber-500/80 inline-block">
+                        <FileText className="w-8 h-8" />
+                      </div>
+                      <h4 className="text-sm font-serif font-bold text-slate-200">لا توجد اختبارات مسجلة حتى الآن</h4>
+                      <p className="text-xs text-slate-400 leading-relaxed font-sans text-center">
+                        لم يخض الطالب أي اختبار مدرسي في هذا الجهاز حتى الآن. اطلب منه فتح "منصة الاختبارات" أو مراجعة وحدة من المنهج وحل أسئلتها لتشاهد تقرير الأداء هنا تفصيلاً!
+                      </p>
+                    </div>
+                  ) : (
+                    // Detailed Report UI
+                    <div className="space-y-6">
+                      {/* Summary Score Card */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Score Circle Widget */}
+                        <div className="bg-[#18152c] border border-indigo-950 p-5 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 relative">
+                          <span className="text-[10px] text-slate-400 leading-none">نسبة التحصيل والنجاح</span>
+                          <div className="relative flex items-center justify-center py-2">
+                            {/* Visual glowing ring around score */}
+                            <div className="w-20 h-20 rounded-full border-4 border-amber-550/25 flex flex-col items-center justify-center bg-[#131124]">
+                              <span className="text-xl font-black text-amber-400 font-serif leading-none">%{lastQuizResult.percentage}</span>
+                            </div>
+                          </div>
+                          <span className={`text-xs font-serif font-black ${
+                            lastQuizResult.percentage >= 80 ? "text-emerald-400" : lastQuizResult.percentage >= 50 ? "text-amber-400" : "text-rose-455"
+                          }`}>
+                            {lastQuizResult.percentage >= 90 ? "تحصيل تفوق متميز 🌟" : lastQuizResult.percentage >= 80 ? "ممتاز وجيد جداً 👍" : lastQuizResult.percentage >= 50 ? "مستواه مقبول ويحتاج لمراجعة 📚" : "يحتاج لدعم ومثابرة إضافية 📖"}
+                          </span>
+                        </div>
+
+                        {/* Metadata card */}
+                        <div className="bg-[#18152c] border border-indigo-950 p-5 rounded-2xl space-y-3 text-right col-span-2 flex flex-col justify-between">
+                          <div className="space-y-1">
+                            <h4 className="text-md font-serif font-semibold text-slate-100 flex items-center gap-1.5 justify-end">
+                              <span>موضوع الاختبار: {lastQuizResult.quizTitle}</span>
+                            </h4>
+                            <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                              نوع التقييم الأكاديمي:{" "}
+                              <span className="text-amber-300 font-bold">
+                                {lastQuizResult.quizType === "comprehensive" ? "امتحان شامل لكتاب التاريخ" : lastQuizResult.quizType === "unit" ? "اختبار الوحدة الدراسية" : "اختبار الدرس التفصيلي"}
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                              تاريخ ووقت حل الاختبار: <span className="text-amber-200 font-bold">{lastQuizResult.timestamp}</span>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between border-t border-indigo-900/30 pt-3 flex-wrap gap-2 text-right">
+                            <span className="text-xs text-slate-300 font-sans">
+                              الإجابات الصحيحة: <span className="text-emerald-400 font-bold text-sm font-serif">{lastQuizResult.score}</span> من أصل <span className="text-slate-100 font-bold font-serif">{lastQuizResult.total}</span>
+                            </span>
+                            
+                            {/* Copy WhatsApp / Telegram button */}
+                            <button
+                              onClick={() => {
+                                handlePlaySound("click");
+                                const summaryText = `*تقرير المتابعة الدراسية لم مادة التاريخ الصف السادس* 🇸🇩\n\nأتم التلميذ(ة) اختبار: (${lastQuizResult.quizTitle})\nنوع التقييم الدراسي: ${lastQuizResult.quizType === "comprehensive" ? "امتحان شامل" : lastQuizResult.quizType === "unit" ? "اختبار وحدة" : "اختبار درس"}\nتوقيت الامتحان: ${lastQuizResult.timestamp}\n\n*النتيجة والتقدير:*\nالتحصيل العام للدرجة: %${lastQuizResult.percentage}\nصواب الإجابات: ${lastQuizResult.score} من ${lastQuizResult.total} أسئلة.\n\nتاريخنا عريق، ومستقبلنا باهر! ✨`;
+                                navigator.clipboard.writeText(summaryText);
+                                alert("تم نسخ تقرير الأداء وصياغته لحافظتك بنجاح! يمكنك الآن لصقه ومشاركته مع العائلة فورا عبر الواتساب أو تيليجرام 📲");
+                              }}
+                              className="bg-indigo-900/60 hover:bg-amber-600 hover:text-white text-amber-250 border border-amber-500/10 rounded-xl px-3 py-1.5 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer font-sans"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>مشاركة النتيجة بالواتس آب 🔗</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Question-By-Question Inspection List */}
+                      <div className="space-y-3.5">
+                        <h4 className="text-sm font-serif font-bold text-slate-300 flex items-center gap-1.5 justify-end">
+                          <span>سجل الإجابات التفصيلي والدرجات لكل سؤال 🔍</span>
+                        </h4>
+
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                          {lastQuizResult.questions.map((q: any, qIdx: number) => (
+                            <div 
+                              key={q.id || qIdx} 
+                              className={`rounded-2xl p-4 border text-right space-y-2.5 transition duration-200 ${
+                                q.isCorrect 
+                                  ? "bg-emerald-950/15 border-emerald-900/40 hover:border-emerald-555/40" 
+                                  : "bg-rose-950/15 border-rose-900/40 hover:border-rose-555/40"
+                              }`}
+                            >
+                              {/* Questions Heading */}
+                              <div className="flex items-start justify-between gap-3 flex-row-reverse">
+                                <div className="flex gap-2 items-center flex-row-reverse">
+                                  <span className="text-[10px] bg-[#17142d] border border-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-serif font-bold">السؤال {qIdx + 1}</span>
+                                  <h5 className="text-xs md:text-sm font-bold text-slate-100 font-serif leading-relaxed">{q.text}</h5>
+                                </div>
+                                
+                                {q.isCorrect ? (
+                                  <span className="bg-emerald-950/60 text-emerald-400 border border-emerald-900/40 text-[10px] px-2.5 py-0.5 rounded-full font-sans font-bold flex items-center gap-1 shrink-0">
+                                    <Check className="w-3 h-3" />
+                                    <span>صحيحة</span>
+                                  </span>
+                                ) : (
+                                  <span className="bg-rose-950/60 text-rose-400 border border-rose-900/40 text-[10px] px-2.5 py-0.5 rounded-full font-sans font-bold flex items-center gap-1 shrink-0">
+                                    <span className="text-rose-400 text-xs">⚠️</span>
+                                    <span>بحاجة لمراجعة</span>
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Student's vs correct answers block */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs border-t border-indigo-950/30 pt-2.5 font-sans text-right">
+                                <div className="p-2.5 rounded-xl bg-[#09080f]/45 space-y-1">
+                                  <span className="text-[10px] text-slate-500 block leading-none font-serif">إجابة الطالب:</span>
+                                  <p className={`font-bold leading-relaxed font-serif ${q.isCorrect ? "text-emerald-400" : "text-rose-400"}`}>{q.userAnswer}</p>
+                                </div>
+                                <div className="p-2.5 rounded-xl bg-[#09080f]/45 space-y-1">
+                                  <span className="text-[10px] text-slate-500 block leading-none font-serif">الإجابة الصحيحة المقررة:</span>
+                                  <p className="font-bold text-amber-300 leading-relaxed font-serif">{q.correctAnswer}</p>
+                                </div>
+                              </div>
+
+                              {/* Corrective advice explanation */}
+                              {q.explanation && (
+                                <p className="text-[11px] text-slate-300 leading-relaxed font-sans bg-amber-500/5 p-2 rounded-xl text-right border border-amber-500/10">
+                                  <span className="font-bold text-amber-400 block mb-0.5 font-serif">التحليل التعليمي للفقرة:</span>
+                                  {q.explanation}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1710,7 +2165,7 @@ export default function App() {
                     const firstPageParagraphs = activeLesson.content.slice(0, 2);
                     const secondPageParagraphs = activeLesson.content.slice(2);
                     
-                    const isWide = typeof window !== "undefined" && window.innerWidth >= 768;
+                    const isWide = isBookWide;
                     const currentSpread = Math.floor(bookPageIndex / 2);
                     
                     const hasPrev = currentLessonIdx > 0 || (isWide ? currentSpread > 0 : bookPageIndex > 0);
@@ -1927,15 +2382,18 @@ export default function App() {
                               animate={{ opacity: 1, rotateY: 0, scale: 1 }}
                               exit={{ opacity: 0, rotateY: -35, scale: 0.97, transformOrigin: "center center" }}
                               transition={{ duration: 0.45, ease: "easeInOut" }}
-                              className="grid grid-cols-1 md:grid-cols-2 relative h-full"
+                              className={`grid ${isWide ? "grid-cols-2" : "grid-cols-1"} relative h-full`}
                               style={{ transformStyle: "preserve-3d" }}
                             >
                             {/* Realistic book binding center spine and inner shadows */}
-                            <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -ml-[2px] w-[4px] bg-gradient-to-r from-black/15 via-[#423325]/30 to-black/15 shadow-xl z-20 pointer-events-none"></div>
-                            <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -ml-8 w-16 bg-gradient-to-r from-transparent via-black/[0.04] to-transparent pointer-events-none z-10"></div>
+                            <div className={`${isWide ? "block" : "hidden"} absolute top-0 bottom-0 left-1/2 -ml-[2px] w-[4px] bg-gradient-to-r from-black/15 via-[#423325]/30 to-black/15 shadow-xl z-20 pointer-events-none`}></div>
+                            <div className={`${isWide ? "block" : "hidden"} absolute top-0 bottom-0 left-1/2 -ml-8 w-16 bg-gradient-to-r from-transparent via-black/[0.04] to-transparent pointer-events-none z-10`}></div>
 
                             {/* ==================== PAGE 0: BOOK COVER (RIGHT COLUMN IN SPREAD 0) ==================== */}
-                            <div className={`${currentSpread === 0 ? "md:flex" : "md:hidden"} ${bookPageIndex === 0 ? "flex" : "hidden"} md:border-l md:border-[#ebdcb4] p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                            <div className={`${isWide ? (currentSpread === 0 ? "flex" : "hidden") : (bookPageIndex === 0 ? "flex" : "hidden")} ${isWide ? "border-l border-[#ebdcb4]" : ""} p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                              {/* Dynamic animated calm background */}
+                              {isCalmBGActive && <LessonCalmBackground />}
+
                               {/* Page Bookmark Tag */}
                               <div className="absolute top-0 right-8 bg-[#3e2e21] text-[#FAF6EE] text-[9px] px-2 py-1 rounded-b-md shadow font-bold tracking-wider select-none">
                                 التاريخ المنهجي 🇸🇩
@@ -2063,7 +2521,10 @@ export default function App() {
                             </div>
 
                             {/* ==================== PAGE 1: NARRATIONS PART 1 (LEFT COLUMN IN SPREAD 0) ==================== */}
-                            <div className={`${currentSpread === 0 ? "md:flex" : "md:hidden"} ${bookPageIndex === 1 ? "flex" : "hidden"} p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                            <div className={`${isWide ? (currentSpread === 0 ? "flex" : "hidden") : (bookPageIndex === 1 ? "flex" : "hidden")} p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                              {/* Deep animated calm background */}
+                              {isCalmBGActive && <LessonCalmBackground />}
+
                               <div className="space-y-4">
                                 {/* Page Header */}
                                 <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
@@ -2153,7 +2614,10 @@ export default function App() {
                             </div>
 
                             {/* ==================== PAGE 2: NARRATIONS PART 2 (RIGHT COLUMN IN SPREAD 1) ==================== */}
-                            <div className={`${currentSpread === 1 ? "md:flex" : "md:hidden"} ${bookPageIndex === 2 ? "flex" : "hidden"} md:border-l md:border-[#ebdcb4] p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                            <div className={`${isWide ? (currentSpread === 1 ? "flex" : "hidden") : (bookPageIndex === 2 ? "flex" : "hidden")} ${isWide ? "border-l border-[#ebdcb4]" : ""} p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                              {/* Deep animated calm background */}
+                              {isCalmBGActive && <LessonCalmBackground />}
+
                               <div className="space-y-4">
                                 {/* Page Header */}
                                 <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
@@ -2252,7 +2716,10 @@ export default function App() {
                             </div>
 
                             {/* ==================== PAGE 3: KEY POINTS & RECAP (LEFT COLUMN IN SPREAD 1) ==================== */}
-                            <div className={`${currentSpread === 1 ? "md:flex" : "md:hidden"} ${bookPageIndex === 3 ? "flex" : "hidden"} p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                            <div className={`${isWide ? (currentSpread === 1 ? "flex" : "hidden") : (bookPageIndex === 3 ? "flex" : "hidden")} p-6 md:p-8 flex-col justify-between space-y-6 relative w-full h-full`}>
+                              {/* Deep animated calm background */}
+                              {isCalmBGActive && <LessonCalmBackground />}
+
                               <div className="space-y-4">
                                 {/* Page Header */}
                                 <div className="flex items-center justify-between border-b border-[#e6daae]/80 pb-3">
@@ -2738,6 +3205,138 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Step 4: Choose Question Types */}
+                <div className="bg-[#121020]/90 border border-indigo-950/80 rounded-2xl p-6 space-y-4">
+                  <h3 className="text-base font-serif font-bold text-slate-200 flex items-center gap-2 border-b border-indigo-950 pb-2">
+                    <span className="bg-[#10b981]/10 text-[#10b981] w-6 h-6 rounded-lg text-xs flex items-center justify-center font-bold">٤</span>
+                    <span>تخصيص نوع وجودة الأسئلة المشمولة:</span>
+                  </h3>
+                  
+                  <p className="text-[11px] text-slate-400 font-sans leading-relaxed text-right md:-mt-1">
+                    قم بتخصيص تركيبة الامتحان طبقاً لرغبتك. يمكنك تفعيل جميع الأنواع أو تخصيص نمط محدد للمذاكرة المركّزة:
+                  </p>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                    {/* Choose MCQ */}
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhTypesMCQ(!qhTypesMCQ);
+                      }}
+                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        qhTypesMCQ
+                          ? "bg-amber-950/30 border-amber-500 shadow-md ring-1 ring-amber-500/20"
+                          : "bg-[#18152c]/50 border-indigo-950/40 text-slate-400 opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      <span className="text-lg">🔘</span>
+                      <span className="font-serif font-bold text-xs text-slate-100">خيار متعدد</span>
+                      <input 
+                        type="checkbox" 
+                        checked={qhTypesMCQ} 
+                        readOnly 
+                        className="accent-amber-500 h-3.5 w-3.5 mt-0.5 rounded pointer-events-none" 
+                      />
+                    </button>
+
+                    {/* Choose True/False */}
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhTypesTF(!qhTypesTF);
+                      }}
+                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        qhTypesTF
+                          ? "bg-amber-950/30 border-amber-500 shadow-md ring-1 ring-amber-500/20"
+                          : "bg-[#18152c]/50 border-indigo-950/40 text-slate-400 opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      <span className="text-lg">✔️</span>
+                      <span className="font-serif font-bold text-xs text-slate-100">صح / خطأ</span>
+                      <input 
+                        type="checkbox" 
+                        checked={qhTypesTF} 
+                        readOnly 
+                        className="accent-amber-500 h-3.5 w-3.5 mt-0.5 rounded pointer-events-none" 
+                      />
+                    </button>
+
+                    {/* Choose Blank */}
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhTypesBlank(!qhTypesBlank);
+                      }}
+                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        qhTypesBlank
+                          ? "bg-amber-950/30 border-amber-500 shadow-md ring-1 ring-amber-500/20"
+                          : "bg-[#18152c]/50 border-indigo-950/40 text-slate-400 opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      <span className="text-lg">✏️</span>
+                      <span className="font-serif font-bold text-xs text-slate-100">إكمال الفراغ</span>
+                      <input 
+                        type="checkbox" 
+                        checked={qhTypesBlank} 
+                        readOnly 
+                        className="accent-amber-500 h-3.5 w-3.5 mt-0.5 rounded pointer-events-none" 
+                      />
+                    </button>
+
+                    {/* Choose Match */}
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhTypesMatch(!qhTypesMatch);
+                      }}
+                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        qhTypesMatch
+                          ? "bg-amber-950/30 border-amber-500 shadow-md ring-1 ring-amber-500/20"
+                          : "bg-[#18152c]/50 border-indigo-950/40 text-slate-400 opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      <span className="text-lg">🧩</span>
+                      <span className="font-serif font-bold text-xs text-slate-100">توصيل وتطابق</span>
+                      <input 
+                        type="checkbox" 
+                        checked={qhTypesMatch} 
+                        readOnly 
+                        className="accent-amber-500 h-3.5 w-3.5 mt-0.5 rounded pointer-events-none" 
+                      />
+                    </button>
+
+                    {/* Choose Essay */}
+                    <button
+                      onClick={() => {
+                        handlePlaySound("click");
+                        setQhTypesEssay(!qhTypesEssay);
+                      }}
+                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                        qhTypesEssay
+                          ? "bg-amber-950/30 border-amber-500 shadow-md ring-1 ring-amber-500/20"
+                          : "bg-[#18152c]/50 border-indigo-950/40 text-slate-400 opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      <span className="text-lg">📜</span>
+                      <span className="font-serif font-bold text-xs text-slate-100">أسئلة مقالية</span>
+                      <input 
+                        type="checkbox" 
+                        checked={qhTypesEssay} 
+                        readOnly 
+                        className="accent-amber-500 h-3.5 w-3.5 mt-0.5 rounded pointer-events-none" 
+                      />
+                    </button>
+                  </div>
+
+                  {qhChallengeType !== "mcq" && (
+                    <div className="bg-amber-950/20 border border-amber-900/20 rounded-xl p-3 text-right">
+                      <p className="text-[10px] text-amber-400 leading-normal font-sans">
+                        ⚠️ تنبيه: لقد اخترت نمط تحدّ متخصّص ("{qhChallengeType === "speedrun" ? "تحدي السرعة" : "لعبة التوصيل"}"). هذا النمط سوف يركّز على طبيعة أسئلته المطابقة ("{qhChallengeType === "speedrun" ? "صح/خطأ فقط" : "توصيل فقط"}") لتوفير أفضل تجربة لعب وتواصل معرفية.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
               </div>
 
               {/* Right Column: Summaries & Button - 4 columns */}
@@ -2773,6 +3372,24 @@ export default function App() {
                       <span className="text-slate-100 font-bold">
                         {qhChallengeType === "mcq" ? "النمط المنهجي (شامل)" : qhChallengeType === "speedrun" ? "صح وخطأ متسارع سريع" : "مطابقة وتوصيل المفاهيم"}
                       </span>
+                    </div>
+
+                    <div className="flex flex-col border-b border-indigo-950/30 pb-2 gap-1 text-right">
+                      <div className="flex justify-between items-center animate-[fadeIn_0.2s_ease]">
+                        <span className="text-slate-400 font-sans">الأنواع المحددة:</span>
+                        <span className="text-[#10b981] font-bold">
+                          {qhChallengeType !== "mcq" ? "تلقائي حسب النمط" : "مخصصة ⚙️"}
+                        </span>
+                      </div>
+                      {qhChallengeType === "mcq" && (
+                        <div className="flex flex-wrap gap-1 justify-end pt-1">
+                          {qhTypesMCQ && <span className="bg-amber-950/45 text-amber-400 border border-amber-900/35 px-1.5 py-0.5 rounded text-[9px] font-sans">خيار متعدد</span>}
+                          {qhTypesTF && <span className="bg-amber-950/45 text-amber-400 border border-amber-900/35 px-1.5 py-0.5 rounded text-[9px] font-sans">صح/خطأ</span>}
+                          {qhTypesBlank && <span className="bg-amber-950/45 text-amber-400 border border-amber-900/35 px-1.5 py-0.5 rounded text-[9px] font-sans">إكمال فراغ</span>}
+                          {qhTypesMatch && <span className="bg-amber-950/45 text-amber-400 border border-amber-900/35 px-1.5 py-0.5 rounded text-[9px] font-sans">توصيل</span>}
+                          {qhTypesEssay && <span className="bg-amber-950/45 text-amber-400 border border-amber-900/35 px-1.5 py-0.5 rounded text-[9px] font-sans">مقالي</span>}
+                        </div>
+                      )}
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400">مجموع نقاط التحدي:</span>
@@ -2865,7 +3482,12 @@ export default function App() {
                           <button
                             disabled={!essayAnswerText.trim()}
                             onClick={() => {
+                              const qId = quizQuestions[quizIdx].id;
                               setEssayChecked(true);
+                              setAnsweredQuestionInGroup(prev => ({
+                                ...prev,
+                                [qId]: { userOption: essayAnswerText, correct: true }
+                              }));
                               setQuizAnswersCount(prev => prev + 1);
                               handlePlaySound("success");
                               setSelectedOption("checked");
@@ -2905,8 +3527,13 @@ export default function App() {
                           <button
                             disabled={!essayAnswerText.trim() || !!selectedOption}
                             onClick={() => {
+                              const qId = quizQuestions[quizIdx].id;
                               setSelectedOption(essayAnswerText);
                               const isCorrect = essayAnswerText.trim() === quizQuestions[quizIdx].correctAnswer.trim();
+                              setAnsweredQuestionInGroup(prev => ({
+                                ...prev,
+                                [qId]: { userOption: essayAnswerText, correct: isCorrect }
+                              }));
                               if (isCorrect) {
                                 handlePlaySound("success");
                                 setQuizAnswersCount(prev => prev + 1);
