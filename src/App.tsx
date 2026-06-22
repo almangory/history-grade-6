@@ -44,6 +44,7 @@ import {
   Moon,
   Play
 } from "lucide-react";
+import { Pause, Settings, Trash2, Image, Video, Radio, Volume1 } from "lucide-react";
 
 export default function App() {
   // Firebase Auth states
@@ -166,6 +167,273 @@ export default function App() {
   const [timelineIndex, setTimelineIndex] = useState(0);
   const [flashcardIdx, setFlashcardIdx] = useState(0);
   const [flashcardFlipped, setFlashcardFlipped] = useState(false);
+
+  // Hakawati (Storyteller) Speech States
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [speechRate, setSpeechRate] = useState(1);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [currentSpeechParagraphIndex, setCurrentSpeechParagraphIndex] = useState<number | null>(null);
+
+  // Lesson Media Customizations
+  const [customMedia, setCustomMedia] = useState<Record<string, { url: string; type: "image" | "video" | "gif" | "drive" }>>(() => {
+    try {
+      const saved = localStorage.getItem("sub_historian_custom_media");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [isEditingMedia, setIsEditingMedia] = useState(false);
+  const [mediaUrlInput, setMediaUrlInput] = useState("");
+  const [mediaTypeInput, setMediaTypeInput] = useState<"image" | "video" | "gif" | "drive">("image");
+
+  // Save customized media to localStorage
+  useEffect(() => {
+    localStorage.setItem("sub_historian_custom_media", JSON.stringify(customMedia));
+  }, [customMedia]);
+
+  // Load available speech synthesis voices
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        setAvailableVoices(voices);
+        const arVoice = voices.find(v => v.lang.startsWith("ar"));
+        if (arVoice) {
+          setSelectedVoice(arVoice);
+        }
+      };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    return () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Cancel speech on lesson or tab change
+  const stopSpeaking = () => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+    setIsPaused(false);
+    setCurrentSpeechParagraphIndex(null);
+  };
+
+  useEffect(() => {
+    stopSpeaking();
+  }, [currentLessonIdx, selectedUnitId, currentTab, lessonActiveSubTab]);
+
+  const pauseSpeaking = () => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const resumeSpeaking = () => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.resume();
+      setIsPaused(false);
+    }
+  };
+
+  const speakParagraph = (idx: number, paragraphs: string[]) => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      if (idx >= paragraphs.length) {
+        stopSpeaking();
+        return;
+      }
+      window.speechSynthesis.cancel(); // safety reset
+      setCurrentSpeechParagraphIndex(idx);
+      setIsSpeaking(true);
+      setIsPaused(false);
+
+      const textToRead = paragraphs[idx];
+      const utterance = new SpeechSynthesisUtterance(textToRead);
+      utterance.lang = "ar";
+      utterance.rate = speechRate;
+      
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      } else {
+        const arVoice = availableVoices.find(v => v.lang.startsWith("ar"));
+        if (arVoice) utterance.voice = arVoice;
+      }
+
+      utterance.onend = () => {
+        setTimeout(() => {
+          speakParagraph(idx + 1, paragraphs);
+        }, 400);
+      };
+
+      utterance.onerror = (e) => {
+        console.error("Speech error:", e);
+        if (e.error !== "interrupted") {
+          stopSpeaking();
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const startSpeakingAll = (paragraphs: string[]) => {
+    handlePlaySound("click");
+    speakParagraph(0, paragraphs);
+  };
+
+  // Helper parsers for media embedding
+  const getGoogleDriveEmbedUrl = (url: string) => {
+    const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+      return `https://drive.google.com/file/d/${fileIdMatch[1]}/preview`;
+    }
+    const idMatch = url.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+    if (idMatch && idMatch[1]) {
+      return `https://drive.google.com/file/d/${idMatch[1]}/preview`;
+    }
+    return url;
+  };
+
+  const getYouTubeEmbedUrl = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2] && match[2].length === 11) {
+      return `https://www.youtube.com/embed/${match[2]}`;
+    }
+    return url;
+  };
+
+  const handleSaveCustomMedia = (lessonId: string) => {
+    handlePlaySound("click");
+    if (!mediaUrlInput.trim()) {
+      const updated = { ...customMedia };
+      delete updated[lessonId];
+      setCustomMedia(updated);
+      setIsEditingMedia(false);
+      return;
+    }
+
+    let autoType = mediaTypeInput;
+    const urlLower = mediaUrlInput.toLowerCase().trim();
+    
+    if (urlLower.includes("drive.google.com")) {
+      autoType = "drive";
+    } else if (urlLower.includes("youtube.com") || urlLower.includes("youtu.be") || urlLower.endsWith(".mp4") || urlLower.endsWith(".webm")) {
+      autoType = "video";
+    } else if (urlLower.endsWith(".gif")) {
+      autoType = "gif";
+    }
+
+    setCustomMedia(prev => ({
+      ...prev,
+      [lessonId]: {
+        url: mediaUrlInput.trim(),
+        type: autoType
+      }
+    }));
+    setIsEditingMedia(false);
+  };
+
+  const handleResetCustomMedia = (lessonId: string) => {
+    handlePlaySound("click");
+    const updated = { ...customMedia };
+    delete updated[lessonId];
+    setCustomMedia(updated);
+    setMediaUrlInput("");
+    setIsEditingMedia(false);
+  };
+
+  const handleStartEditingMedia = (lessonId: string) => {
+    handlePlaySound("click");
+    const existing = customMedia[lessonId];
+    if (existing) {
+      setMediaUrlInput(existing.url);
+      setMediaTypeInput(existing.type);
+    } else {
+      setMediaUrlInput("");
+      setMediaTypeInput("image");
+    }
+    setIsEditingMedia(prev => !prev);
+  };
+
+  const renderLessonMedia = (lessonId: string, defaultIllustration: string) => {
+    const media = customMedia[lessonId];
+    if (!media) {
+      return <SVGIllustration type={defaultIllustration} className="w-full h-56 bg-slate-950/40 rounded-xl border border-indigo-950/40" />;
+    }
+
+    const { url, type } = media;
+
+    if (type === "drive") {
+      const embedUrl = getGoogleDriveEmbedUrl(url);
+      return (
+        <div className="relative w-full h-56 rounded-xl overflow-hidden border border-indigo-950/40 bg-zinc-950 flex flex-col">
+          <iframe
+            src={embedUrl}
+            className="w-full h-[224px] border-none"
+            allow="autoplay"
+            title="Google Drive Resource"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute top-2 right-2 bg-indigo-950/80 text-indigo-200 text-[10px] px-2 py-0.5 rounded-full border border-indigo-850/50">
+            مُستند Google Drive 📂
+          </div>
+        </div>
+      );
+    }
+
+    if (type === "video") {
+      if (url.includes("youtube.com") || url.includes("youtu.be")) {
+        const embedUrl = getYouTubeEmbedUrl(url);
+        return (
+          <div className="relative w-full h-56 rounded-xl overflow-hidden border border-indigo-950/40 bg-zinc-950">
+            <iframe
+              src={embedUrl}
+              className="w-full h-full border-none"
+              allowFullScreen
+              title="YouTube Video Resource"
+            />
+          </div>
+        );
+      }
+      return (
+        <video
+          src={url}
+          controls
+          className="w-full h-56 bg-slate-950 rounded-xl border border-indigo-950/40 object-cover"
+          loop
+          muted
+          autoPlay
+        />
+      );
+    }
+
+    return (
+      <div className="relative w-full h-56 rounded-xl overflow-hidden border border-indigo-950/40 bg-slate-950/30">
+        <img
+          src={url}
+          alt="صورة الدرس المخصصة"
+          className="w-full h-full object-cover rounded-xl"
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            e.currentTarget.src = "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&q=80&w=800";
+          }}
+        />
+        {type === "gif" && (
+          <span className="absolute top-2 right-2 bg-[#d97706]/90 text-white text-[10px] font-bold px-2 py-0.5 rounded">
+            صورة متحركة GIF 🎬
+          </span>
+        )}
+      </div>
+    );
+  };
 
   // Play Mode States
   const [quizMode, setQuizMode] = useState<"none" | "curriculum" | "speedrun" | "match">("none");
@@ -1444,13 +1712,216 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* Integrated custom synthesized SVG vector illustrations describing events */}
-                    <SVGIllustration type={selectedUnit.lessons[currentLessonIdx].illustration} className="w-full h-52 bg-slate-950/40 rounded-xl border border-indigo-950/40" />
+                    {/* الحكواتي الصوتي لقراءة الدرس */}
+                    <div className="bg-gradient-to-l from-[#2c1d2c]/65 to-[#121020]/90 border border-amber-900/40 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
+                      <div className="flex items-center gap-3.5 w-full md:w-auto">
+                        <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 border-2 border-amber-400 shadow flex items-center justify-center text-2xl shrink-0 ${isSpeaking && !isPaused ? "animate-bounce" : ""}`}>
+                          👳‍♂️
+                        </div>
+                        <div className="text-right">
+                          <h4 className="text-sm font-bold font-serif text-amber-300 flex items-center gap-1.5 justify-end">
+                            <span>الحَكَواتي السُّودانِي الْمُثَقَّف 🎧</span>
+                            {isSpeaking && !isPaused && (
+                              <span className="flex gap-0.5 items-end h-3 w-5 justify-end">
+                                <span className="w-1 bg-amber-400 h-2 animate-pulse rounded-full"></span>
+                                <span className="w-1 bg-amber-400 h-3 animate-pulse rounded-full"></span>
+                                <span className="w-1 bg-amber-400 h-1 animate-pulse rounded-full"></span>
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[11px] text-slate-300 leading-snug">اطلب من الحكواتي تلاوة الدرس بنبرة واضحة ومخارج حروف متقنة لتسهيل الحفظ والتركيز.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:justify-end">
+                        {/* Voice selection */}
+                        {availableVoices.length > 0 && (
+                          <select
+                            value={selectedVoice?.name || ""}
+                            onChange={(e) => {
+                              const v = availableVoices.find(voice => voice.name === e.target.value);
+                              if (v) setSelectedVoice(v);
+                            }}
+                            className="bg-[#151121] text-xs text-amber-200 border border-indigo-950/70 p-1.5 rounded-lg font-serif outline-none"
+                          >
+                            {availableVoices.filter(v => v.lang.startsWith("ar")).map(voice => (
+                              <option key={voice.name} value={voice.name}>
+                                {voice.name} {voice.lang === "ar-EG" ? "🇪🇬" : voice.lang === "ar-SA" ? "🇸🇦" : "🌐"}
+                              </option>
+                            ))}
+                            {availableVoices.filter(v => !v.lang.startsWith("ar")).slice(0, 3).map(voice => (
+                              <option key={voice.name} value={voice.name}>
+                                {voice.name} ({voice.lang})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* Speed Select */}
+                        <select
+                          value={speechRate}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            setSpeechRate(value);
+                          }}
+                          className="bg-[#151121] text-xs text-amber-200 border border-indigo-950/70 p-1.5 rounded-lg font-serif outline-none"
+                          title="سرعة تلاوة الحكواتي"
+                        >
+                          <option value={0.8}>بطيء جداً (0.8x)</option>
+                          <option value={1.0}>السرعة العادية (1.0x)</option>
+                          <option value={1.25}>سريع قليلاً (1.25x)</option>
+                          <option value={1.5}>سريع (1.5x)</option>
+                        </select>
+
+                        {/* Play / Pause / Stop controls */}
+                        <div className="flex items-center gap-1">
+                          {!isSpeaking ? (
+                            <button
+                              onClick={() => startSpeakingAll(selectedUnit.lessons[currentLessonIdx].content)}
+                              className="bg-amber-600 hover:bg-amber-500 text-amber-950 hover:text-black font-bold px-4 py-1.5 rounded-lg text-xs flex items-center gap-1.5 border border-amber-500 shadow-lg cursor-pointer transition-colors animate-pulse"
+                            >
+                              <Volume1 className="w-3.5 h-3.5" />
+                              <span>استمع للدرس 🎙️</span>
+                            </button>
+                          ) : (
+                            <>
+                              {isPaused ? (
+                                <button
+                                  onClick={resumeSpeaking}
+                                  className="bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="استئناف القراءة"
+                                >
+                                  <Play className="w-3.5 h-3.5" />
+                                  <span>أكمل</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={pauseSpeaking}
+                                  className="bg-amber-800 hover:bg-amber-700 text-amber-100 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="إيقاف مؤقت"
+                                >
+                                  <Pause className="w-3.5 h-3.5" />
+                                  <span>مؤقت</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={stopSpeaking}
+                                className="bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                                title="إيقاف كلي"
+                              >
+                                <span className="w-2.5 h-2.5 bg-white rounded-sm shrink-0"></span>
+                                <span>قطع</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Integrated custom synthesized SVG vector illustrations / custom dynamic media loader */}
+                    <div className="space-y-3">
+                      {renderLessonMedia(selectedUnit.lessons[currentLessonIdx].id, selectedUnit.lessons[currentLessonIdx].illustration)}
+                      
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={() => handleStartEditingMedia(selectedUnit.lessons[currentLessonIdx].id)}
+                          className="text-xs text-amber-400 hover:text-amber-200 transition flex items-center gap-1.5 bg-[#17132a]/60 px-3 py-1.5 rounded-xl border border-indigo-950 cursor-pointer"
+                        >
+                          <Settings className="w-3.5 h-3.5" />
+                          <span>{customMedia[selectedUnit.lessons[currentLessonIdx].id] ? "تعديل رابط الصورة المخصصة 🎨" : "إضافة صورة متحركة أو فيديو أو رابط درايف لهذا الدرس 🔗"}</span>
+                        </button>
+                        {customMedia[selectedUnit.lessons[currentLessonIdx].id] && (
+                          <button
+                            onClick={() => handleResetCustomMedia(selectedUnit.lessons[currentLessonIdx].id)}
+                            className="text-xs text-red-400 hover:text-red-300 transition flex items-center gap-1 cursor-pointer"
+                            title="استعادة الصورة الأصلية"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف التخصيص 🚫</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {isEditingMedia && (
+                        <div className="bg-[#18152c] border border-indigo-950 p-4 rounded-xl space-y-4 font-sans text-right">
+                          <div className="space-y-1">
+                            <h5 className="text-xs font-bold text-amber-400">تخصيص وسائط الدرس 🎨</h5>
+                            <p className="text-[11px] text-slate-400">أي رابط صورة مباشرة، صورة متحركة GIF، فيديو، رابط يوتيوب أو Google Drive (يتم تحويله تلقائياً لنمط الإطار المستديم).</p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-xs text-slate-300 block select-none">رابط الوسائط (URL):</label>
+                            <input
+                              type="text"
+                              value={mediaUrlInput}
+                              onChange={(e) => setMediaUrlInput(e.target.value)}
+                              placeholder="مثال: https://example.com/image.gif أو رابط قوقل درايف..."
+                              dir="ltr"
+                              className="w-full text-xs p-2.5 rounded-lg bg-[#110e1e] border border-indigo-950 text-white placeholder-slate-600 focus:outline-none focus:border-amber-600 text-left"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setMediaTypeInput("image")}
+                              className={`px-3 py-1.5 rounded-lg text-xs transition border cursor-pointer ${mediaTypeInput === "image" ? "bg-amber-900/40 border-amber-500 text-amber-200" : "bg-[#151225] border-indigo-950/70 text-slate-400"}`}
+                            >
+                              صورة / GIF ثابت
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMediaTypeInput("video")}
+                              className={`px-3 py-1.5 rounded-lg text-xs transition border cursor-pointer ${mediaTypeInput === "video" ? "bg-amber-900/40 border-amber-500 text-amber-200" : "bg-[#151225] border-indigo-950/70 text-slate-400"}`}
+                            >
+                              فيديو مباشر / يوتيوب
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMediaTypeInput("drive")}
+                              className={`px-3 py-1.5 rounded-lg text-xs transition border cursor-pointer ${mediaTypeInput === "drive" ? "bg-amber-900/40 border-amber-500 text-amber-200" : "bg-[#151225] border-indigo-950/70 text-slate-400"}`}
+                            >
+                              مستند قوقل درايف
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingMedia(false)}
+                              className="bg-indigo-950/40 hover:bg-[#201c3e] text-slate-300 px-3 py-1.5 rounded-lg text-xs transition border border-indigo-950/50 cursor-pointer"
+                            >
+                              إلغاء
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveCustomMedia(selectedUnit.lessons[currentLessonIdx].id)}
+                              className="bg-amber-700 hover:bg-amber-600 text-white px-4 py-1.5 rounded-lg text-xs transition font-bold border border-amber-500 cursor-pointer shadow"
+                            >
+                              حفظ التغييرات 💾
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     <div className="space-y-4 text-slate-200 text-base leading-relaxed text-right md:text-justify font-serif">
-                      {selectedUnit.lessons[currentLessonIdx].content.map((p, pIdx) => (
-                        <p key={pIdx}>{p}</p>
-                      ))}
+                      {selectedUnit.lessons[currentLessonIdx].content.map((p, pIdx) => {
+                        const isReadingThis = currentSpeechParagraphIndex === pIdx && isSpeaking;
+                        return (
+                          <div 
+                            key={pIdx} 
+                            className={`transition-all duration-300 p-2.5 rounded-xl border ${
+                              isReadingThis 
+                                ? "bg-amber-900/20 border-amber-600/40 text-amber-200 font-bold scale-[1.01] shadow-md shadow-amber-950/20" 
+                                : "border-transparent text-slate-200"
+                            }`}
+                          >
+                            <p>{p}</p>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* Key points box (أهم ما نستخلصه) */}
