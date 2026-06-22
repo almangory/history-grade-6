@@ -292,8 +292,13 @@ option {
 
 /* Premium A4 Print Overrides */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 15mm 10mm 15mm;
+  }
+
   /* Hide all interactive, web-only layout parts */
-  header, footer, nav, button, select, input, .no-print, .bg-gradient-to-r, #nav-bar, .bg-[#121020]/95 {
+  header, footer, nav, button, select, input, .no-print, .bg-gradient-to-r, #nav-bar, .bg-[#121020]/95, [id^="nav-"] {
     display: none !important;
   }
   
@@ -301,12 +306,18 @@ option {
     background-color: #ffffff !important;
     color: #000000 !important;
     font-family: "Amiri", Georgia, serif !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   main {
     padding: 0 !important;
     margin: 0 !important;
     max-width: 100% !important;
+    width: 100% !important;
+    background: transparent !important;
   }
 
   /* Force A4 print sizes to take up full paper sheets and separate per page index */
@@ -315,12 +326,30 @@ option {
     box-shadow: none !important;
     padding: 0 !important;
     margin: 0 !important;
-    width: 210mm !important;
-    min-height: 297mm !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 265mm !important; /* precise fit inside paper with print margins */
     page-break-after: always !important;
+    page-break-inside: avoid !important;
     background-color: #ffffff !important;
     color: #000000 !important;
-    display: block !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Ensure deep high-contrast text and border rendering on paper */
+  div[id^="printable-page-"] * {
+    color: #000000 !important;
+    border-color: #1e293b !important;
+  }
+
+  /* Keep table/row background graphics active */
+  div[id^="printable-page-"] .bg-slate-100 {
+    background-color: #f1f5f9 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
 

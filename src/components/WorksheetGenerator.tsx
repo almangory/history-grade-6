@@ -287,7 +287,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
   return (
     <div className="space-y-6">
       {/* SECTION HEADER */}
-      <div className="bg-[#121020] rounded-2xl border border-indigo-950/80 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 select-none">
+      <div className="no-print bg-[#121020] rounded-2xl border border-indigo-950/80 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 select-none">
         <div>
           <span className="bg-amber-500/10 text-amber-300 text-xs px-2.5 py-0.5 rounded-full font-bold border border-amber-500/20 font-sans">
             منشئ الأوراق التعليمية المتكاملة
@@ -332,7 +332,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
       </div>
 
       {/* FILTER & GENERATION PANEL */}
-      <div className="bg-[#15122b] rounded-2xl border border-indigo-950/80 p-5 space-y-4 shadow-lg">
+      <div className="no-print bg-[#15122b] rounded-2xl border border-indigo-950/80 p-5 space-y-4 shadow-lg">
         <h3 className="text-amber-400 font-serif font-bold text-lg flex items-center gap-1.5 border-b border-indigo-950/50 pb-2">
           <span>⚙️ إعدادات ورقة العمل والأسئلة</span>
         </h3>
@@ -519,7 +519,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
 
       {/* NO QUESTIONS WARNING */}
       {scopeType === "favorites" && favoriteLessons.length === 0 && (
-        <div className="bg-amber-950/40 border border-amber-600/30 text-amber-200 rounded-2xl p-4 flex items-start gap-3">
+        <div className="no-print bg-amber-950/40 border border-amber-600/30 text-amber-200 rounded-2xl p-4 flex items-start gap-3">
           <Info className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
           <div className="space-y-1">
             <h4 className="font-bold">قائمة المفضلة لديك فارغة حالياً</h4>
@@ -532,7 +532,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
 
       {/* PASSWORD BOX & WATERMARK STATE BAR */}
       {worksheetMode === "print" && (
-        <div className="bg-[#181530] rounded-2xl p-4 border border-indigo-950 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
+        <div className="no-print bg-[#181530] rounded-2xl p-4 border border-indigo-950 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${removeWatermark ? "bg-emerald-950/50 text-emerald-400" : "bg-amber-950/50 text-amber-400"}`}>
               {removeWatermark ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
@@ -921,7 +921,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                B. STRICT PRINTABLE WORKPLACE A4 LAYOUT
                ======================================= */
             <div className="space-y-8 select-none flex flex-col items-center">
-              <div className="text-center pb-2">
+              <div className="no-print text-center pb-2">
                 <span className="text-amber-500 text-sm font-bold flex items-center justify-center gap-1">
                   💡 تلميح: أوراق العمل مهيأة تماماً ومظبوطة بمسافات الطباعة A4 المعتمدة
                 </span>
@@ -954,7 +954,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                       <div>
                         <h1 className="text-2xl font-black text-slate-950 tracking-tight flex items-center gap-1">
                           <span>المُؤرِّخ الصَّغير 🏛️</span>
-                          <span className="text-xs bg-slate-900 text-white font-sans font-bold px-2 py-0.5 rounded ml-1">المرحلة الابتدائية</span>
+                          <span className="text-xs border border-slate-900 text-slate-900 font-sans font-bold px-2 py-0.5 rounded ml-1">المرحلة الابتدائية</span>
                         </h1>
                         <p className="text-xs text-slate-600 font-sans mt-0.5 font-medium leading-none">شعارنا: جيل واعد، تاريخ عريق، معرفة ذكية</p>
                       </div>
@@ -963,6 +963,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                         <div>التاريخ: .....................</div>
                         <div>اسم الطالب: .......................................</div>
                         <div>الصف: السادس الابتدائي</div>
+                        <div className="text-[10px] text-slate-500 font-medium">رابط المنصة: <span className="font-sans font-bold">{window.location.host}</span></div>
                       </div>
                     </div>
 
@@ -1061,8 +1062,8 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
 
                   {/* Worksheet Footer */}
                   <div className="relative z-10 border-t border-slate-300 pt-3 mt-8 flex justify-between items-center text-[10px] text-slate-500 font-sans">
-                    <div>© كراسة المؤرخ الصغير - نقلة للمناهج الالكترونية</div>
-                    <div className="font-bold">مستوى الصف السادس - عهد الاستكشاف والنيل العظيم</div>
+                    <div>© منصة المؤرخ الصغير | حل الكراسة تفاعلياً عبر الموقع: <span className="font-bold underline text-slate-700">{window.location.origin}</span></div>
+                    <div className="font-bold">كراسة أوراق العمل - الصف السادس الابتدائي</div>
                   </div>
                 </div>
               ))}
