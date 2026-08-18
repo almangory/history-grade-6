@@ -1,0 +1,22 @@
+{
+  "name": "تاريخ السودان والتربية الوطنية - الصف السادس الابتدائي",
+  "short_name": "تاريخ السادس 🇸🇩",
+  "description": "المنصة التعليمية التفاعلية الشاملة لمادة التاريخ والتربية الوطنية للصف السادس الابتدائي في السودان وفق منهج بخت الرضا",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f0d1c",
+  "theme_color": "#121020",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["education", "books", "history"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -38,6 +38,60 @@ export const SVGIllustration: React.FC<SVGProps> = ({ className = "w-full h-48",
       );
     }
 
+    case "HistoricSudanMap":
+    case "Map": { // Sudan Historical Map showing Nile, Blue Nile, White Nile, Khartoum, Sennar, Shendi, Darfur, Kordofan
+      return (
+        <div className={containerClass}>
+          <svg viewBox="0 0 400 200" className="w-full h-full text-emerald-800 max-h-40" stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {/* Background landmass shading */}
+            <path d="M60 20 C120 15, 260 20, 340 30 C350 70, 360 120, 330 180 C260 190, 140 185, 70 170 C50 120, 45 60, 60 20 Z" fill="#FEF3C7" stroke="#D97706" strokeWidth="1.5" opacity="0.7" />
+            
+            {/* Red Sea Coast */}
+            <path d="M300 20 C320 60, 340 100, 360 140" stroke="#0284C7" strokeWidth="4" />
+            <text x="345" y="45" textAnchor="middle" className="text-[9px] font-bold" stroke="none" fill="#0369A1">البحر الأحمر</text>
+
+            {/* Main Nile River with confluence */}
+            <path d="M210 20 Q200 45 200 70" stroke="#3B82F6" strokeWidth="3" />
+            {/* Blue Nile heading southeast */}
+            <path d="M200 70 Q230 110 260 160" stroke="#2563EB" strokeWidth="2.5" />
+            {/* White Nile heading south */}
+            <path d="M200 70 Q190 120 185 180" stroke="#60A5FA" strokeWidth="2.5" />
+
+            {/* Historic Cities markers */}
+            {/* Khartoum (Confluence) */}
+            <circle cx="200" cy="70" r="4" fill="#DC2626" stroke="#FEF2F2" strokeWidth="1.5" />
+            <text x="170" y="68" textAnchor="middle" className="text-[10px] font-extrabold" stroke="none" fill="#991B1B">الخرطوم</text>
+
+            {/* Sennar (Blue Nile) */}
+            <circle cx="230" cy="115" r="3.5" fill="#15803D" stroke="#FEF2F2" strokeWidth="1" />
+            <text x="255" y="118" textAnchor="middle" className="text-[9px] font-bold" stroke="none" fill="#166534">سنار</text>
+
+            {/* Shendi */}
+            <circle cx="205" cy="45" r="3" fill="#D97706" stroke="#FEF2F2" strokeWidth="1" />
+            <text x="225" y="45" textAnchor="middle" className="text-[9px] font-bold" stroke="none" fill="#B45309">شندي</text>
+
+            {/* El Obeid (Kordofan) */}
+            <circle cx="140" cy="110" r="3" fill="#9333EA" stroke="#FEF2F2" strokeWidth="1" />
+            <text x="110" y="112" textAnchor="middle" className="text-[9px] font-bold" stroke="none" fill="#7E22CE">الأبيض</text>
+
+            {/* El Fasher (Darfur) */}
+            <circle cx="90" cy="95" r="3" fill="#EA580C" stroke="#FEF2F2" strokeWidth="1" />
+            <text x="80" y="85" textAnchor="middle" className="text-[9px] font-bold" stroke="none" fill="#C2410C">الفاشر</text>
+
+            {/* Compass Rose */}
+            <g transform="translate(350, 160) scale(0.6)">
+              <circle cx="0" cy="0" r="20" fill="#FFFBEB" stroke="#92400E" strokeWidth="1.5" />
+              <polygon points="0,-18 5,-4 0,0 -5,-4" fill="#DC2626" />
+              <polygon points="0,18 5,4 0,0 -5,4" fill="#1E293B" />
+              <polygon points="18,0 4,5 0,0 4,-5" fill="#1E293B" />
+              <polygon points="-18,0 -4,5 0,0 -4,-5" fill="#1E293B" />
+              <text x="0" y="-22" textAnchor="middle" className="text-[10px] font-bold" stroke="none" fill="#DC2626">ش</text>
+            </g>
+          </svg>
+        </div>
+      );
+    }
+
     case "KhartoumCpt":
     case "Building": { // Khartoum as capital, government departments
       return (

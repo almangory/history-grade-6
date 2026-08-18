@@ -15,6 +15,8 @@ import { MapExplorer } from "./components/MapExplorer";
 import { AIChatBot } from "./components/AIChatBot";
 import { SmartScholarSearch } from "./components/SmartScholarSearch";
 import { WorksheetGenerator } from "./components/WorksheetGenerator";
+import { GalleryView } from "./components/GalleryView";
+import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, signInWithGoogle, logoutUser, db } from "./firebase";
@@ -222,7 +224,7 @@ export default function App() {
   }, [userName, userAvatar, score, unlockedBadges, lastQuizResult, currentUser]);
 
   // App Navigation States
-  const [currentTab, setCurrentTab] = useState<"dashboard" | "unit" | "map" | "chat" | "quiz_hub" | "badges" | "worksheets">("dashboard");
+  const [currentTab, setCurrentTab] = useState<"dashboard" | "unit" | "map" | "chat" | "quiz_hub" | "badges" | "worksheets" | "gallery">("dashboard");
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   
   // Responsive layout detector (Tablets, landscape phones) & Calm BG
@@ -1233,9 +1235,15 @@ export default function App() {
                 setCurrentTab("dashboard");
                 setSelectedUnitId(null);
               }}
-              className="bg-[#1b1930] hover:bg-[#252244] border border-indigo-900/50 text-amber-400 p-2.5 rounded-xl shadow-md hover:scale-105 transition cursor-pointer"
+              className="bg-[#1b1930] hover:bg-[#252244] border border-amber-500/30 p-1.5 rounded-2xl shadow-lg hover:scale-105 transition cursor-pointer flex items-center justify-center shrink-0"
+              title="العودة للرئيسية"
             >
-              <Compass className="w-6 h-6 animate-[spin_40s_linear_infinite]" />
+              <img 
+                src="/icon.svg" 
+                alt="شعار تاريخ السادس" 
+                className="w-9 h-9 rounded-xl object-contain"
+                referrerPolicy="no-referrer"
+              />
             </button>
             <div>
               <h1 className="text-xl md:text-2xl font-serif font-bold text-amber-400 flex items-center gap-1.5">
@@ -1248,6 +1256,9 @@ export default function App() {
 
           {/* User Score Ribbon */}
           <div className="flex items-center gap-3 select-none flex-wrap justify-center font-sans">
+            {/* PWA Install Button */}
+            <PWAInstallPrompt onPlaySound={handlePlaySound} />
+
             {/* Theme Toggle */}
             <button
               onClick={() => {
@@ -1419,6 +1430,23 @@ export default function App() {
             >
               <FileText className="w-4 h-4 text-sky-400 shrink-0" />
               <span>أَوْرَاقُ العَمَلِ وَالطبَاعَة 🖨️</span>
+            </button>
+
+            <button
+              id="nav-gallery"
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("gallery");
+                setQuizMode("none");
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                currentTab === "gallery" && quizMode === "none"
+                  ? "bg-amber-800 text-slate-100 shadow-md border border-amber-600/30 scale-102"
+                  : "bg-[#18152c]/65 text-slate-300 hover:bg-[#201c3e]/80 border border-transparent hover:text-slate-100"
+              }`}
+            >
+              <Image className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>مَعْرَضُ الصُّوَرِ وَالخَرَائِطِ 🖼️</span>
             </button>
 
             <button
@@ -2035,6 +2063,22 @@ export default function App() {
               onPlaySound={handlePlaySound}
               score={score}
               setScore={setScore}
+            />
+          </div>
+        )}
+
+        {/* TAB GALLERY: HISTORICAL ARTWORKS, MAPS & BLUEPRINTS GALLERY */}
+        {currentTab === "gallery" && quizMode === "none" && (
+          <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
+            <GalleryView
+              units={UNITS}
+              onSelectLesson={(uId, lIdx) => {
+                setSelectedUnitId(uId);
+                setCurrentLessonIdx(lIdx);
+                setCurrentTab("unit");
+                setBookPageIndex(0);
+              }}
+              onPlaySound={handlePlaySound}
             />
           </div>
         )}
@@ -3896,6 +3940,16 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="font-serif text-slate-300 select-none">© {new Date().getFullYear()} المُؤَرِّخ الصَّغِير – جُمْهُورِيَّةُ السُّودَانِ - مَنَاهِجُ المَرْكَزُ القَوْمِي لِلمَنَاهِجِ وَالبَحْثِ التَّرْبَوِي بِبَخْتِ الرِّضَا</p>
           <div className="flex gap-4">
+            <button
+              onClick={() => {
+                handlePlaySound("click");
+                setCurrentTab("gallery");
+              }}
+              className="hover:text-amber-400 font-bold transition cursor-pointer"
+            >
+              معرض الصور والخرائط
+            </button>
+            <span className="text-slate-500">•</span>
             <button
               onClick={() => {
                 handlePlaySound("click");
