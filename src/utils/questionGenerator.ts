@@ -173,8 +173,63 @@ export const ESSAY_QUESTION_BANK: Question[] = [
 ];
 
 /**
+ * Normalizes Arabic text for duplicate detection by removing diacritics, punctuation,
+ * and normalizing letter variants.
+ */
+export function normalizeArabicText(text: string): string {
+  return text
+    .replace(/[\u064B-\u065F\u0670]/g, "") // Diacritics / Tashkeel
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()؟?،"':؛«»[\]]/g, " ")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/[ة]/g, "ه")
+    .replace(/[ى]/g, "ي")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Extracts a core semantic fingerprint of a question statement to prevent
+ * asking about the same underlying fact with different question templates.
+ */
+export function getQuestionFactSignature(text: string): string {
+  let cleaned = normalizeArabicText(text);
+
+  // Strip generic question instructions and boilerplate
+  const prefixes = [
+    /^ضع علامه صواب او خطا\s*/,
+    /^ضع علامه صح او خطا\s*/,
+    /^اكمل الفراغ بالكلمه المناسبه وفق درس [^:]+:\s*/,
+    /^اكمل الفراغ بالكلمه التاريخيه المناسبه:\s*/,
+    /^اكمل الفراغ:\s*/,
+    /^من الحقائق التاريخيه المؤكده في درس [^:]+:\s*/,
+    /^اكتب نبذه موجزه توضح فيها اهم احداث ومخرجات درس [^:]+:\s*/,
+    /^ارتبط حدث [^ ]+ بـ\s*/,
+    /^ينفي درس [^ ]+ ان\s*/,
+  ];
+
+  for (const prefix of prefixes) {
+    cleaned = cleaned.replace(prefix, "");
+  }
+
+  // Remove common Arabic stop words to isolate informative keywords
+  const stopWords = new Set([
+    "في", "من", "على", "الى", "عن", "مع", "هذا", "هذه", "ذلك", "تلك", "التي", "الذي",
+    "الذين", "اللاتي", "ان", "انها", "انه", "كان", "كانت", "وقد", "قد", "ما", "هو", "هي", "هم",
+    "او", "ثم", "بل", "حيث", "بين", "كما", "كل", "جميع", "درس", "الوحده", "عام", "سنه", "وفق"
+  ]);
+
+  const tokens = cleaned
+    .split(" ")
+    .filter(w => w.length >= 3 && !stopWords.has(w));
+
+  return tokens.slice(0, 8).join("_");
+}
+
+/**
  * Procedural generation engine that pulls authentically from the rich question bank
- * and generates clean, curriculum-aligned questions matching Sudanese 6th Grade History syllabus.
+ * and generates clean, curriculum-aligned questions matching Sudanese 6th Grade History syllabus
+ * with STRICT ZERO-DUPLICATION guarantees across all pages and modes.
  */
 export const generateDynamicQuestions = (
   targetCount: number,
@@ -222,58 +277,129 @@ export const generateDynamicQuestions = (
     return true;
   });
 
-  // Track unique question texts to prevent duplicates
+  // Track unique question normalized texts and fact signatures to strictly prevent duplicates
   const seenTexts = new Set<string>();
+  const seenSignatures = new Set<string>();
   const results: Question[] = [];
 
+  // Shuffle pool with high entropy to ensure freshness
+  const shuffledPool = [...pool].sort(() => 0.5 - Math.random());
+
   // Add all matching authentic questions from the filtered pool first
-  for (const q of pool) {
-    if (!seenTexts.has(q.text.trim())) {
-      seenTexts.add(q.text.trim());
+  for (const q of shuffledPool) {
+    const norm = normalizeArabicText(q.text);
+    const sig = getQuestionFactSignature(q.text);
+
+    if (!seenTexts.has(norm) && (!sig || !seenSignatures.has(sig))) {
+      seenTexts.add(norm);
+      if (sig) seenSignatures.add(sig);
       results.push(q);
+
+      if (results.length >= targetCount) {
+        return results;
+      }
     }
   }
 
-  // If we already have enough questions, return shuffled slice
-  if (results.length >= targetCount) {
-    const shuffled = [...results].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, targetCount);
-  }
-
-  // 2. If more questions are required, systematically expand from lesson keypoints
-  // using strictly curriculum-accurate templates without any artificial filler text.
+  // 2. If more questions are required, systematically expand from lesson keypoints, content sentences, and timelines
   let targetUnits = config.unitId ? UNITS.filter(u => u.id === config.unitId) : UNITS;
-  let targetLessons = config.lessonId 
-    ? UNITS.flatMap(u => u.lessons).filter(l => l.id === config.lessonId)
-    : targetUnits.flatMap(u => u.lessons);
+  let targetLessons: typeof UNITS[0]['lessons'] = [];
+
+  if (config.type === "lesson" && config.lessonId) {
+    targetLessons = UNITS.flatMap(u => u.lessons).filter(l => l.id === config.lessonId);
+    if (targetLessons.length > 0) {
+      const parentU = UNITS.find(u => u.lessons.some(l => l.id === config.lessonId));
+      if (parentU) targetUnits = [parentU];
+    }
+  } else if (config.type === "unit" && config.unitId) {
+    targetUnits = UNITS.filter(u => u.id === config.unitId);
+    targetLessons = targetUnits.flatMap(u => u.lessons);
+  } else {
+    targetLessons = targetUnits.flatMap(u => u.lessons);
+  }
 
   if (targetLessons.length === 0) {
-    targetLessons = UNITS.flatMap(u => u.lessons);
-    targetUnits = UNITS;
+    targetLessons = targetUnits.flatMap(u => u.lessons);
   }
 
-  // Generate clean curriculum questions from authentic lesson facts
-  let attempts = 0;
-  while (results.length < targetCount && attempts < 1000) {
-    attempts++;
-    const lesson = targetLessons[Math.floor(Math.random() * targetLessons.length)];
-    const parentUnit = UNITS.find(u => u.lessons.some(l => l.id === lesson.id)) || targetUnits[0];
+  // Gather all discrete fact statements from target lessons (keypoints + full content sentences)
+  interface DiscreteFact {
+    statement: string;
+    lesson: typeof targetLessons[0];
+    parentUnit: typeof targetUnits[0];
+  }
 
-    if (!lesson.keyPoints || lesson.keyPoints.length === 0) continue;
-    const kp = lesson.keyPoints[Math.floor(Math.random() * lesson.keyPoints.length)];
+  const rawFacts: DiscreteFact[] = [];
 
-    const activeTypes: QuestionType[] = [];
-    if (config.typesSelected.mcq) activeTypes.push(QuestionType.MCQ);
-    if (config.typesSelected.tf) activeTypes.push(QuestionType.TRUE_FALSE);
-    if (config.typesSelected.blank) activeTypes.push(QuestionType.FILL_BLANK);
-    if (config.typesSelected.essay) activeTypes.push(QuestionType.ESSAY);
+  for (const l of targetLessons) {
+    const parentU = UNITS.find(u => u.lessons.some(x => x.id === l.id)) || targetUnits[0];
 
-    if (activeTypes.length === 0) break;
+    // Add keyPoints
+    if (l.keyPoints) {
+      for (const kp of l.keyPoints) {
+        if (kp.trim().length > 10) {
+          rawFacts.push({ statement: kp.trim(), lesson: l, parentUnit: parentU });
+        }
+      }
+    }
 
-    const chosenType = activeTypes[Math.floor(Math.random() * activeTypes.length)];
+    // Add content sentences
+    if (l.content) {
+      for (const paragraph of l.content) {
+        const sentences = paragraph.split(/[.،؛\n]/).map(s => s.trim()).filter(s => s.length > 15);
+        for (const s of sentences) {
+          rawFacts.push({ statement: s, lesson: l, parentUnit: parentU });
+        }
+      }
+    }
+  }
+
+  // Also include timeline milestones for unit scope
+  for (const u of targetUnits) {
+    if (u.timeline) {
+      for (const t of u.timeline) {
+        const dummyLesson = u.lessons[0] || targetLessons[0];
+        rawFacts.push({
+          statement: `في عام (${t.year}): ${t.title} - ${t.description}`,
+          lesson: dummyLesson,
+          parentUnit: u
+        });
+      }
+    }
+  }
+
+  // Shuffle facts so variety is maximal
+  const shuffledFacts = [...rawFacts].sort(() => 0.5 - Math.random());
+
+  const activeTypes: QuestionType[] = [];
+  if (config.typesSelected.mcq) activeTypes.push(QuestionType.MCQ);
+  if (config.typesSelected.tf) activeTypes.push(QuestionType.TRUE_FALSE);
+  if (config.typesSelected.blank) activeTypes.push(QuestionType.FILL_BLANK);
+  if (config.typesSelected.essay) activeTypes.push(QuestionType.ESSAY);
+
+  if (activeTypes.length === 0) {
+    return results.slice(0, targetCount);
+  }
+
+  let typeRoundRobin = 0;
+
+  for (const factObj of shuffledFacts) {
+    if (results.length >= targetCount) break;
+
+    const { statement: kp, lesson, parentUnit } = factObj;
+    const normStatement = normalizeArabicText(kp);
+    const factSig = getQuestionFactSignature(kp);
+
+    // Skip if this fact was already tested in any question
+    if (seenTexts.has(normStatement) || (factSig && seenSignatures.has(factSig))) {
+      continue;
+    }
+
+    const chosenType = activeTypes[typeRoundRobin % activeTypes.length];
+    typeRoundRobin++;
 
     if (chosenType === QuestionType.TRUE_FALSE) {
-      const isTrue = Math.random() > 0.35;
+      const isTrue = Math.random() > 0.4;
       let qText = "";
       let ans = "";
       let exp = "";
@@ -283,16 +409,26 @@ export const generateDynamicQuestions = (
         ans = "صواب";
         exp = `العبارة صحيحة تماماً وتوافق ما ورد في درس (${lesson.title}).`;
       } else {
-        // Create an authentic alternative fact from another lesson in the curriculum
-        const otherLessons = UNITS.flatMap(u => u.lessons).filter(l => l.id !== lesson.id);
-        const otherL = otherLessons[Math.floor(Math.random() * otherLessons.length)];
-        qText = `ضع علامة (صواب) أو (خطأ): ارتبط حدث (${lesson.title}) بـ: "${otherL.keyPoints[0] || otherL.title}"`;
-        ans = "خطأ";
-        exp = `العبارة غير صحيحة، لأن هذه المعلومة تخص درس (${otherL.title}).`;
+        // Create an authentic false statement strictly within the allowed unit/lesson boundaries
+        const siblingLessons = targetLessons.filter(l => l.id !== lesson.id);
+        if (siblingLessons.length > 0) {
+          const otherL = siblingLessons[Math.floor(Math.random() * siblingLessons.length)];
+          const otherKp = otherL.keyPoints[0] || otherL.title;
+          qText = `ضع علامة (صواب) أو (خطأ): ارتبط حدث (${lesson.title}) بـ: "${otherKp}"`;
+          ans = "خطأ";
+          exp = `العبارة غير صحيحة، لأن هذه المعلومة تخص درس (${otherL.title}) في نفس الوحدة المقررة.`;
+        } else {
+          // In a single lesson, construct a negation or incorrect assertion within the lesson
+          qText = `ضع علامة (صواب) أو (خطأ): ينفي درس (${lesson.title}) أن: "${kp}"`;
+          ans = "خطأ";
+          exp = `العبارة غير صحيحة، بل الحقيقة التاريخية المؤكدة في هذا الدرس هي: ${kp}`;
+        }
       }
 
-      if (!seenTexts.has(qText.trim())) {
-        seenTexts.add(qText.trim());
+      const qNorm = normalizeArabicText(qText);
+      if (!seenTexts.has(qNorm)) {
+        seenTexts.add(qNorm);
+        if (factSig) seenSignatures.add(factSig);
         results.push({
           id: `curr_gen_tf_${results.length + 1}`,
           unitId: parentUnit.id,
@@ -305,58 +441,66 @@ export const generateDynamicQuestions = (
         });
       }
     } else if (chosenType === QuestionType.FILL_BLANK) {
-      // Pick a sentence with a good keyword to blank out
-      const words = kp.split(" ");
+      const words = kp.split(" ").filter(w => w.length > 0);
       if (words.length >= 4) {
-        // Pick an important word (avoiding short prepositions)
-        let maskIdx = Math.floor(words.length / 2);
+        let maskIdx = -1;
         for (let i = 0; i < words.length; i++) {
-          const w = words[i].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
-          if (w.length >= 4 && !["التي", "الذي", "على", "فيما", "إلى", "عنها", "منها", "وكان", "حيث"].includes(w)) {
+          const w = words[i].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()؟?،"':؛«»[\]]/g, "");
+          if (w.length >= 4 && !["التي", "الذي", "على", "فيما", "إلى", "عنها", "منها", "وكان", "حيث", "جميع", "أهم"].includes(w)) {
             maskIdx = i;
             break;
           }
         }
 
-        const maskedWord = words[maskIdx].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
-        if (maskedWord && maskedWord.length >= 3) {
-          const copyWords = [...words];
-          copyWords[maskIdx] = "........";
-          const qText = `أكمل الفراغ بالكلمة التاريخية المناسبة: "${copyWords.join(" ")}"`;
+        if (maskIdx !== -1) {
+          const maskedWord = words[maskIdx].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()؟?،"':؛«»[\]]/g, "");
+          if (maskedWord && maskedWord.length >= 3) {
+            const copyWords = [...words];
+            copyWords[maskIdx] = "........";
+            const qText = `أكمل الفراغ بالكلمة المناسبة وفق درس (${lesson.title}): "${copyWords.join(" ")}"`;
+            const qNorm = normalizeArabicText(qText);
 
-          if (!seenTexts.has(qText.trim())) {
-            seenTexts.add(qText.trim());
-            results.push({
-              id: `curr_gen_blank_${results.length + 1}`,
-              unitId: parentUnit.id,
-              lessonId: lesson.id,
-              type: QuestionType.FILL_BLANK,
-              text: qText,
-              correctAnswer: maskedWord,
-              explanation: `الكلمة المنهجية الصحيحة لإكمال العبارة هي: (${maskedWord}).`
-            });
+            if (!seenTexts.has(qNorm)) {
+              seenTexts.add(qNorm);
+              if (factSig) seenSignatures.add(factSig);
+              results.push({
+                id: `curr_gen_blank_${results.length + 1}`,
+                unitId: parentUnit.id,
+                lessonId: lesson.id,
+                type: QuestionType.FILL_BLANK,
+                text: qText,
+                correctAnswer: maskedWord,
+                explanation: `الكلمة المنهجية الصحيحة لإكمال العبارة في درس (${lesson.title}) هي: (${maskedWord}).`
+              });
+            }
           }
         }
       }
     } else if (chosenType === QuestionType.MCQ) {
-      // Create clean MCQ question using lesson keypoint
       const qText = `من الحقائق التاريخية المؤكدة في درس (${lesson.title}):`;
       const correctOpt = kp;
 
-      // Extract 3 real distractors from other curriculum lessons
-      const otherKeyPoints = targetLessons
+      let distractorCandidates = targetLessons
         .filter(l => l.id !== lesson.id)
         .flatMap(l => l.keyPoints)
         .filter(k => k !== correctOpt && k.length > 5);
 
-      const shuffledOthers = [...otherKeyPoints].sort(() => 0.5 - Math.random());
+      if (distractorCandidates.length < 3) {
+        const sameLessonOtherPoints = lesson.keyPoints.filter(k => k !== correctOpt);
+        const sameLessonContent = lesson.content.filter(c => c.length > 10 && c !== correctOpt);
+        distractorCandidates = [...distractorCandidates, ...sameLessonOtherPoints, ...sameLessonContent];
+      }
+
+      const shuffledOthers = [...distractorCandidates].sort(() => 0.5 - Math.random());
       const distractors = shuffledOthers.slice(0, 3);
 
-      if (distractors.length >= 3) {
+      if (distractors.length >= 2) {
         const options = [correctOpt, ...distractors].sort(() => 0.5 - Math.random());
+        const qNorm = normalizeArabicText(qText + " " + correctOpt);
 
-        if (!seenTexts.has(qText.trim())) {
-          seenTexts.add(qText.trim());
+        if (!seenTexts.has(qNorm)) {
+          seenTexts.add(qNorm);
+          if (factSig) seenSignatures.add(factSig);
           results.push({
             id: `curr_gen_mcq_${results.length + 1}`,
             unitId: parentUnit.id,
@@ -365,19 +509,21 @@ export const generateDynamicQuestions = (
             text: qText,
             options,
             correctAnswer: correctOpt,
-            explanation: `الإجابة الصحيحة المقررة: ${kp}`
+            explanation: `الإجابة الصحيحة المقررة في درس (${lesson.title}): ${kp}`
           });
         }
       }
     } else if (chosenType === QuestionType.ESSAY) {
-      const qText = `اكتب نبذة تاريخية موجزة توضح فيها أهم أحداث ومخرجات درس: (${lesson.title}).`;
+      const qText = `اكتب نبذة موجزة توضح فيها أهم أحداث ومخرجات درس: (${lesson.title}).`;
       const modelAnswer = `الإجابة النموذجية المعتمدة لدرس (${lesson.title}):\n` + 
         (lesson.content.slice(0, 2).join("\n") || kp) + 
         `\n\nالنقاط الأساسية:\n` + 
         lesson.keyPoints.map(p => `• ${p}`).join("\n");
 
-      if (!seenTexts.has(qText.trim())) {
-        seenTexts.add(qText.trim());
+      const qNorm = normalizeArabicText(qText);
+      if (!seenTexts.has(qNorm)) {
+        seenTexts.add(qNorm);
+        if (factSig) seenSignatures.add(factSig);
         results.push({
           id: `curr_gen_essay_${results.length + 1}`,
           unitId: parentUnit.id,
@@ -391,7 +537,6 @@ export const generateDynamicQuestions = (
     }
   }
 
-  // Final shuffle and slice to exact targetCount
-  const shuffled = [...results].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, targetCount);
+  // Return strictly unique, non-duplicated questions
+  return results.slice(0, targetCount);
 };

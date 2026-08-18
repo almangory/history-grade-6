@@ -32,6 +32,8 @@ const WATERMARK_PASSCODE = "20302060";
 // Diagram Options
 interface DiagramConfig {
   id: string;
+  unitId: number;
+  lessonId?: string;
   title: string;
   description: string;
   imageAlt: string;
@@ -39,8 +41,11 @@ interface DiagramConfig {
 }
 
 const DIAGRAMS_LIST: DiagramConfig[] = [
+  // الوحدة الأولى
   {
     id: "admin_struct",
+    unitId: 1,
+    lessonId: "u1_l2",
     title: "هيكل الحكم الإداري في عهد المديريات (شكل 1-4)",
     description: "وزع المكونات الحكومية الصحيحة في صناديق هيكل الحكم التركي المصري للمديرية.",
     imageAlt: "هيكل المديرية",
@@ -54,6 +59,8 @@ const DIAGRAMS_LIST: DiagramConfig[] = [
   },
   {
     id: "campaign_map",
+    unitId: 1,
+    lessonId: "u1_l1",
     title: "خارطة بلاد السودان ومسار حملات الغزو (1820م - 1821م)",
     description: "حدد المحطات والمدن الإستراتيجية المهمة التي مرت بها قوّات محمد علي باشا.",
     imageAlt: "خريطة حملات الغزو",
@@ -66,8 +73,58 @@ const DIAGRAMS_LIST: DiagramConfig[] = [
       { id: "w6", name: "سنار", x: 62, y: 84 }
     ]
   },
+  // الوحدة الثانية
+  {
+    id: "baghdad_map",
+    unitId: 2,
+    lessonId: "u2_l2",
+    title: "مخطط مدينة بغداد الدائرية وأبوابها الأربعة (العصر العباسي)",
+    description: "وزع الأبواب الأربعة وقصر الذهب والجامع الكبير في تخطيط مدينة المنصور الدائرية.",
+    imageAlt: "مخطط بغداد الدائرية",
+    labels: [
+      { id: "b1", name: "باب الشام", x: 48, y: 14 },
+      { id: "b2", name: "باب الكوفة", x: 18, y: 52 },
+      { id: "b3", name: "باب خراسان", x: 78, y: 52 },
+      { id: "b4", name: "باب البصرة", x: 48, y: 86 },
+      { id: "b5", name: "قصر الذهب والجامع الكبير", x: 48, y: 50 }
+    ]
+  },
+  // الوحدة الثالثة
+  {
+    id: "africa_trade",
+    unitId: 3,
+    lessonId: "u3_l4",
+    title: "ممالك إفريقيا الإسلامية ومسار حج السلطان منسا موسى (1324م)",
+    description: "عين الممالك والمحطات الرئيسة في غرب إفريقيا وطريق الحج إلى مكة المكرمة.",
+    imageAlt: "خريطة ممالك إفريقيا",
+    labels: [
+      { id: "af1", name: "إمبراطورية غانا", x: 22, y: 65 },
+      { id: "af2", name: "إمبراطورية مالي وتيمبكتو", x: 38, y: 55 },
+      { id: "af3", name: "إمبراطورية سنغاي وجاوا", x: 50, y: 48 },
+      { id: "af4", name: "القاهرة", x: 75, y: 25 },
+      { id: "af5", name: "مكة المكرمة", x: 86, y: 40 }
+    ]
+  },
+  // الوحدة الرابعة
+  {
+    id: "renaissance_routes",
+    unitId: 4,
+    lessonId: "u4_l2",
+    title: "مسارات حركة الكشوف الجغرافية ورأس الرجاء الصالح",
+    description: "حدد نقاط الانطلاق وطرق الملاحة البحرية الكبرى في عصر النهضة الأوربية.",
+    imageAlt: "خريطة الكشوف الجغرافية",
+    labels: [
+      { id: "c1", name: "البرتغال وإسبانيا (نقطة الانطلاق)", x: 25, y: 20 },
+      { id: "c2", name: "رأس الرجاء الصالح (جنوب إفريقيا)", x: 45, y: 82 },
+      { id: "c3", name: "الهند وجزر التوابل", x: 78, y: 35 },
+      { id: "c4", name: "مضيق ماجلان", x: 15, y: 85 }
+    ]
+  },
+  // الوحدة الخامسة
   {
     id: "sudan_states",
+    unitId: 5,
+    lessonId: "u5_l2",
     title: "خريطة أقاليم ومديريات السودان التاريخية بجيرانه (شكل 1/5)",
     description: "تعرف على الأقاليم الكبرى لجمهورية السودان وحدود الجغرافيا الطبيعية.",
     imageAlt: "خريطة أقاليم السودان",
@@ -79,6 +136,20 @@ const DIAGRAMS_LIST: DiagramConfig[] = [
       { id: "reg5", name: "بلاد كردفان", x: 40, y: 64 },
       { id: "reg6", name: "أقاليم دارفور", x: 15, y: 56 },
       { id: "reg7", name: "ولاية سنار", x: 65, y: 66 }
+    ]
+  },
+  {
+    id: "state_pillars",
+    unitId: 5,
+    lessonId: "u5_l2",
+    title: "مخطط مقومات وأركان الدولة الحديثة الأربعة (شكل 5-2)",
+    description: "وزع أركان ومقومات الدولة الأربعة في مواقعها الصحيحة داخل المخطط الشامل.",
+    imageAlt: "مخطط أركان الدولة",
+    labels: [
+      { id: "p1", name: "الشعب (السكان والمواطنون)", x: 25, y: 25 },
+      { id: "p2", name: "الأرض والإقليم (اليابسة والمياه والمجال الجوي)", x: 75, y: 25 },
+      { id: "p3", name: "الحكومة (السلطة السياسية والتنظيم)", x: 25, y: 75 },
+      { id: "p4", name: "الدستور والقوانين (والسيادة)", x: 75, y: 75 }
     ]
   }
 ];
@@ -228,12 +299,27 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
       scopeType === "lesson" ? `درس محدد: ${units.flatMap(u => u.lessons).find(l => l.id === selectedLessonId)?.title}` : 
       "كامل المقرر الدراسي للصف السادس الابتدائي";
 
+    // Filter diagrams strictly matching the selected scope
+    let availableDiagrams = DIAGRAMS_LIST;
+    if (scopeType === "unit") {
+      availableDiagrams = DIAGRAMS_LIST.filter(d => d.unitId === selectedUnitId);
+    } else if (scopeType === "lesson") {
+      const lessonMatch = DIAGRAMS_LIST.filter(d => d.lessonId === selectedLessonId);
+      availableDiagrams = lessonMatch.length > 0 ? lessonMatch : DIAGRAMS_LIST.filter(d => d.unitId === selectedUnitId);
+    } else if (scopeType === "favorites") {
+      availableDiagrams = DIAGRAMS_LIST.filter(d => d.lessonId && favoriteLessons.includes(d.lessonId));
+    }
+
     const compiled: CompiledWorksheet[] = [];
+    const usedDiagramIds = new Set<string>();
 
     for (let pNum = 1; pNum <= pageCount; pNum++) {
       const startIdx = (pNum - 1) * itemsPerPage;
       const endIdx = startIdx + itemsPerPage;
-      const pageQuestions: CompiledWorksheet['questions'] = selectedQuestions.slice(startIdx, endIdx).map(q => ({
+      const slice = selectedQuestions.slice(startIdx, endIdx);
+
+      // If for a very small lesson we have exhausted questions, don't repeat previous ones
+      const pageQuestions: CompiledWorksheet['questions'] = slice.map(q => ({
         type: q.type,
         text: q.text,
         options: q.options,
@@ -242,23 +328,29 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
         matchPairs: q.matchPairs
       }));
 
-      // If diagrams are toggled, insert one diagram question per page
-      if (typesSelected.diagram && DIAGRAMS_LIST.length > 0) {
-        const diagramIndex = (pNum - 1) % DIAGRAMS_LIST.length;
-        pageQuestions.push({
-          type: "diagram",
-          text: `أعد تسمية وتوجيه البيانات على الشكل التوضيحي التالي الخاص بـ: (${DIAGRAMS_LIST[diagramIndex].title})`,
-          correctAnswer: DIAGRAMS_LIST[diagramIndex].labels.map(l => `${l.id}: ${l.name}`).join(" - "),
-          diagramData: DIAGRAMS_LIST[diagramIndex]
-        });
+      // If diagrams are toggled and diagrams exist for this unit/lesson, insert unique diagram questions only
+      if (typesSelected.diagram && availableDiagrams.length > 0) {
+        const unusedDiagram = availableDiagrams.find(d => !usedDiagramIds.has(d.id));
+        if (unusedDiagram) {
+          usedDiagramIds.add(unusedDiagram.id);
+          pageQuestions.push({
+            type: "diagram",
+            text: `أعد تسمية وتوجيه البيانات على الشكل التوضيحي التالي الخاص بـ: (${unusedDiagram.title})`,
+            correctAnswer: unusedDiagram.labels.map(l => `${l.id}: ${l.name}`).join(" - "),
+            diagramData: unusedDiagram
+          });
+        }
       }
 
-      compiled.push({
-        pageNumber: pNum,
-        title: `ورقة العمل والتقييم - صفحة ${pNum}`,
-        scopeText: scopeLabel,
-        questions: pageQuestions
-      });
+      // Only add page if it has questions
+      if (pageQuestions.length > 0) {
+        compiled.push({
+          pageNumber: pNum,
+          title: `ورقة العمل والتقييم - صفحة ${pNum}`,
+          scopeText: scopeLabel,
+          questions: pageQuestions
+        });
+      }
     }
 
     setGeneratedPages(compiled);
