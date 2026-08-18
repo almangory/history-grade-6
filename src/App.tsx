@@ -13,6 +13,7 @@ import { playSound } from "./components/SoundEffects";
 import { SVGIllustration } from "./components/SVGIllustrations";
 import { MapExplorer } from "./components/MapExplorer";
 import { AIChatBot } from "./components/AIChatBot";
+import { SmartScholarSearch } from "./components/SmartScholarSearch";
 import { WorksheetGenerator } from "./components/WorksheetGenerator";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -251,6 +252,7 @@ export default function App() {
   const [lessonActiveSubTab, setLessonActiveSubTab] = useState<"lessons" | "timeline" | "flashcards">("lessons");
   const [currentLessonIdx, setCurrentLessonIdx] = useState(0);
   const [bookPageIndex, setBookPageIndex] = useState(0); // For paginating lesson parts (0 to 3)
+  const [pageFlipDirection, setPageFlipDirection] = useState<1 | -1>(1); // For realistic 3D paper flipping direction
   const [isReadingMode, setIsReadingMode] = useState(false);
   const [isTOCExpanded, setIsTOCExpanded] = useState(false);
   const [timelineIndex, setTimelineIndex] = useState(0);
@@ -684,7 +686,7 @@ export default function App() {
   }, [speedrunTimer, quizMode]);
 
   // Sound play wrapper helper
-  const handlePlaySound = (type: "click" | "success" | "fail" | "levelup") => {
+  const handlePlaySound = (type: "click" | "success" | "fail" | "levelup" | "pageflip") => {
     if (useSound) playSound(type);
   };
 
@@ -2172,7 +2174,8 @@ export default function App() {
                     const hasNext = currentLessonIdx < selectedUnit.lessons.length - 1 || (isWide ? currentSpread < 1 : bookPageIndex < 3);
                     
                     const handleNextPage = () => {
-                      handlePlaySound("levelup");
+                      setPageFlipDirection(1);
+                      handlePlaySound("pageflip");
                       if (isWide) {
                         if (currentSpread === 0) {
                           setBookPageIndex(2);
@@ -2195,7 +2198,8 @@ export default function App() {
                     };
 
                     const handlePrevPage = () => {
-                      handlePlaySound("levelup");
+                      setPageFlipDirection(-1);
+                      handlePlaySound("pageflip");
                       if (isWide) {
                         if (currentSpread === 1) {
                           setBookPageIndex(0);
@@ -2218,7 +2222,7 @@ export default function App() {
                     };
 
                     return (
-                      <div className="relative bg-[#FAF6EE] text-[#2c221a] rounded-3xl border-4 border-[#3e2e21] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col ring-8 ring-amber-950/20 h-[620px] md:h-[685px] [perspective:1500px]">
+                      <div className="relative bg-[#FAF6EE] text-[#2c221a] rounded-3xl border-4 border-[#3e2e21] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col ring-8 ring-amber-950/20 h-[620px] md:h-[685px] [perspective:2000px]">
                         {/* Immersive Top Toolbar (Reading Mode, TOC) */}
                         <div className="px-6 py-2.5 bg-[#ebdcb4]/30 border-b border-[#ebdcb4]/60 flex items-center justify-between select-none font-sans text-xs text-amber-950 shrink-0 z-20 gap-2">
                           <div className="flex items-center gap-1.5">
@@ -2277,7 +2281,8 @@ export default function App() {
                               <button
                                 key={idx}
                                 onClick={() => {
-                                  handlePlaySound("click");
+                                  setPageFlipDirection(idx >= bookPageIndex ? 1 : -1);
+                                  handlePlaySound("pageflip");
                                   setBookPageIndex(idx);
                                 }}
                                 title={pageTitles[idx]}
@@ -2339,7 +2344,8 @@ export default function App() {
                                         <button
                                           key={p.id}
                                           onClick={() => {
-                                            handlePlaySound("levelup");
+                                            setPageFlipDirection(p.id >= bookPageIndex ? 1 : -1);
+                                            handlePlaySound("pageflip");
                                             setBookPageIndex(p.id);
                                             setIsTOCExpanded(false);
                                           }}
@@ -2373,16 +2379,52 @@ export default function App() {
                           )}
                         </AnimatePresence>
 
-                        {/* Page flipper transition frame */}
-                        <div className="flex-1 overflow-hidden relative">
-                          <AnimatePresence mode="wait">
+                        {/* Page flipper transition frame with realistic 3D paper turning */}
+                        <div className="flex-1 overflow-hidden relative [perspective:2200px] [transform-style:preserve-3d]">
+                          <AnimatePresence mode="wait" custom={pageFlipDirection}>
                             <motion.div
                               key={currentLessonIdx + "_" + (isWide ? currentSpread : bookPageIndex)}
-                              initial={{ opacity: 0, rotateY: 35, scale: 0.97, transformOrigin: "center center" }}
-                              animate={{ opacity: 1, rotateY: 0, scale: 1 }}
-                              exit={{ opacity: 0, rotateY: -35, scale: 0.97, transformOrigin: "center center" }}
-                              transition={{ duration: 0.45, ease: "easeInOut" }}
-                              className={`grid ${isWide ? "grid-cols-2" : "grid-cols-1"} relative h-full`}
+                              custom={pageFlipDirection}
+                              initial={(dir: number) => ({
+                                opacity: 0,
+                                rotateY: dir > 0 ? (isWide ? -32 : -45) : (isWide ? 32 : 45),
+                                scale: 0.97,
+                                filter: "brightness(0.92) contrast(1.03)",
+                                boxShadow: dir > 0 
+                                  ? "-18px 0 30px -10px rgba(44, 34, 26, 0.3)" 
+                                  : "18px 0 30px -10px rgba(44, 34, 26, 0.3)",
+                                transformOrigin: isWide 
+                                  ? (dir > 0 ? "right center" : "left center") 
+                                  : "center center"
+                              })}
+                              animate={{
+                                opacity: 1,
+                                rotateY: 0,
+                                scale: 1,
+                                filter: "brightness(1) contrast(1)",
+                                boxShadow: "0 0 0 rgba(0,0,0,0)",
+                                transition: {
+                                  duration: 0.48,
+                                  ease: [0.22, 1, 0.36, 1]
+                                }
+                              }}
+                              exit={(dir: number) => ({
+                                opacity: 0,
+                                rotateY: dir > 0 ? (isWide ? 36 : 50) : (isWide ? -36 : -50),
+                                scale: 0.97,
+                                filter: "brightness(0.86) contrast(1.03)",
+                                boxShadow: dir > 0 
+                                  ? "22px 0 35px -10px rgba(44, 34, 26, 0.35)" 
+                                  : "-22px 0 35px -10px rgba(44, 34, 26, 0.35)",
+                                transformOrigin: isWide 
+                                  ? (dir > 0 ? "left center" : "right center") 
+                                  : "center center",
+                                transition: {
+                                  duration: 0.38,
+                                  ease: [0.4, 0.0, 0.2, 1]
+                                }
+                              })}
+                              className={`grid ${isWide ? "grid-cols-2" : "grid-cols-1"} relative h-full will-change-transform`}
                               style={{ transformStyle: "preserve-3d" }}
                             >
                             {/* Realistic book binding center spine and inner shadows */}
@@ -3838,6 +3880,16 @@ export default function App() {
               </div>
             )}
       </main>
+
+      {/* Smart Algorithmic Curriculum Search with Voice Input */}
+      <SmartScholarSearch 
+        onSelectLesson={(unitId) => {
+          setSelectedUnitId(unitId);
+          setCurrentTab("unit");
+          setCurrentLessonIdx(0);
+          setBookPageIndex(0);
+        }} 
+      />
 
       {/* Visual bottom parchment style design separator */}
       <footer className="bg-[#09080f]/90 border-t border-indigo-950/65 py-6 text-center text-slate-400 text-xs shrink-0 font-sans mt-auto">

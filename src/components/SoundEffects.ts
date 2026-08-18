@@ -5,7 +5,7 @@
 
 // Simple native sound synthesizer using Web Audio API
 // Excellent for adding immersive, rewarding audio cues in educational games
-export function playSound(type: "click" | "success" | "fail" | "levelup") {
+export function playSound(type: "click" | "success" | "fail" | "levelup" | "pageflip") {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
@@ -13,6 +13,39 @@ export function playSound(type: "click" | "success" | "fail" | "levelup") {
     const ctx = new AudioContextClass();
     
     switch (type) {
+      case "pageflip": {
+        // High fidelity paper page turn sound simulation using filtered noise + gentle sweep
+        const bufferSize = ctx.sampleRate * 0.18; // 180ms
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          // Pink/brown filtered noise
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.4));
+        }
+
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.setValueAtTime(1800, ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.16);
+        filter.Q.setValueAtTime(2.2, ctx.currentTime);
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.01, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.17);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+
+        noise.start();
+        noise.stop(ctx.currentTime + 0.18);
+        break;
+      }
+
       case "click": {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
