@@ -16,6 +16,7 @@ import { AIChatBot } from "./components/AIChatBot";
 import { SmartScholarSearch } from "./components/SmartScholarSearch";
 import { WorksheetGenerator } from "./components/WorksheetGenerator";
 import { GalleryView } from "./components/GalleryView";
+import { ParentExitLockModal } from "./components/ParentExitLockModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -559,6 +560,72 @@ export default function App() {
   const [activeSpeedrunStatement, setActiveSpeedrunStatement] = useState<Question | null>(null);
   const [speedrunIntervalId, setSpeedrunIntervalId] = useState<any>(null);
 
+  // Parent Quiz Lock Exit Protection states
+  const [parentQuizPin, setParentQuizPin] = useState<string>(() => {
+    return localStorage.getItem("sub_historian_parent_pin") || "1234";
+  });
+  const [showParentExitModal, setShowParentExitModal] = useState<boolean>(false);
+  const [pendingExitAction, setPendingExitAction] = useState<(() => void) | null>(null);
+  const [parentSettingsNewPin, setParentSettingsNewPin] = useState<string>("");
+  const [parentSettingsPinSuccess, setParentSettingsPinSuccess] = useState<string>("");
+  const [isWorksheetSolvingActive, setIsWorksheetSolvingActive] = useState<boolean>(false);
+
+  const handleUpdateParentPin = (newPin: string) => {
+    const clean = newPin.trim();
+    setParentQuizPin(clean);
+    localStorage.setItem("sub_historian_parent_pin", clean);
+    if (currentUser?.uid) {
+      const userDocRef = doc(db, "users", currentUser.uid);
+      setDoc(userDocRef, { parentQuizPin: clean }, { merge: true }).catch((e) => console.warn(e));
+    }
+  };
+
+  const requestExitQuiz = (action?: () => void, isForcedCheck?: boolean, customTitle?: string) => {
+    const isQuizActive = quizMode !== "none" && quizIdx < quizQuestions.length;
+    const isWorksheetActive = isWorksheetSolvingActive;
+
+    // If neither quiz nor worksheet is active and forced check is not set, execute directly
+    if (!isForcedCheck && !isQuizActive && !isWorksheetActive) {
+      if (action) action();
+      else setQuizMode("none");
+      return;
+    }
+
+    // Play auditory warning cue when student attempts to exit
+    handlePlaySound("fail");
+
+    if (customTitle) {
+      setQuizTitle(customTitle);
+    } else if (isWorksheetActive) {
+      setQuizTitle("ورقة العمل والتقييم المدرسي");
+    }
+
+    // Intercept with parent exit lock
+    setPendingExitAction(() => () => {
+      setIsWorksheetSolvingActive(false);
+      if (action) action();
+      else setQuizMode("none");
+    });
+    setShowParentExitModal(true);
+  };
+
+  // Prevent accidental page close during active quiz or active worksheet
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const isQuizActive = quizMode !== "none" && quizIdx < quizQuestions.length;
+      const isWorksheetActive = isWorksheetSolvingActive;
+      if (isQuizActive || isWorksheetActive) {
+        e.preventDefault();
+        e.returnValue = "الاختبار أو ورقة العمل قيد الحل! لا يمكن مغادرة الصفحة دون إذن ولي الأمر.";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [quizMode, quizIdx, quizQuestions.length, isWorksheetSolvingActive]);
+
   // Drag & Match Mini-Game States
   const [matchLeft, setMatchLeft] = useState<{ id: string, text: string }[]>([]);
 
@@ -579,12 +646,12 @@ export default function App() {
     const handlePopState = (event: PopStateEvent) => {
       if (useSound) playSound("click");
 
-      // Case A: Inside an active quiz
-      if (quizMode !== "none") {
-        const confirmExit = window.confirm("هل تريد الخروج من الاختبار الحالي؟ لن يتم حفظ التقدم في هذا الامتحان.");
-        if (confirmExit) {
+      // Case A: Inside an active quiz or active worksheet -> trigger parent lock
+      if (quizMode !== "none" || isWorksheetSolvingActive) {
+        requestExitQuiz(() => {
           setQuizMode("none");
-        }
+          setIsWorksheetSolvingActive(false);
+        });
         pushStateSafely(1);
         return;
       }
@@ -618,7 +685,7 @@ export default function App() {
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [currentTab, quizMode]);
+  }, [currentTab, quizMode, quizIdx, quizQuestions.length]);
   const [matchRight, setMatchRight] = useState<{ id: string, text: string }[]>([]);
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [matchedPairs, setMatchedPairs] = useState<Record<string, string>>({}); // Mapping representing LeftID -> RightID
@@ -1231,9 +1298,12 @@ export default function App() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("dashboard");
-                setSelectedUnitId(null);
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("dashboard");
+                  setSelectedUnitId(null);
+                  setQuizMode("none");
+                });
               }}
               className="bg-[#1b1930] hover:bg-[#252244] border border-amber-500/30 p-1.5 rounded-2xl shadow-lg hover:scale-105 transition cursor-pointer flex items-center justify-center shrink-0"
               title="العودة للرئيسية"
@@ -1383,10 +1453,12 @@ export default function App() {
             <button
               id="nav-dashboard"
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("dashboard");
-                setSelectedUnitId(null);
-                setQuizMode("none");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("dashboard");
+                  setSelectedUnitId(null);
+                  setQuizMode("none");
+                });
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 (currentTab === "dashboard" || currentTab === "unit") && quizMode === "none"
@@ -1401,9 +1473,11 @@ export default function App() {
             <button
               id="nav-quiz-hub"
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("quiz_hub");
-                setQuizMode("none");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("quiz_hub");
+                  setQuizMode("none");
+                });
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === "quiz_hub" && quizMode === "none"
@@ -1418,9 +1492,11 @@ export default function App() {
             <button
               id="nav-worksheets"
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("worksheets");
-                setQuizMode("none");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("worksheets");
+                  setQuizMode("none");
+                });
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === "worksheets" && quizMode === "none"
@@ -1435,9 +1511,11 @@ export default function App() {
             <button
               id="nav-gallery"
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("gallery");
-                setQuizMode("none");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("gallery");
+                  setQuizMode("none");
+                });
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === "gallery" && quizMode === "none"
@@ -1452,9 +1530,11 @@ export default function App() {
             <button
               id="nav-map"
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("map");
-                setQuizMode("none");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("map");
+                  setQuizMode("none");
+                });
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === "map" && quizMode === "none"
@@ -1469,9 +1549,11 @@ export default function App() {
             <button
               id="nav-chat"
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("chat");
-                setQuizMode("none");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("chat");
+                  setQuizMode("none");
+                });
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === "chat" && quizMode === "none"
@@ -1486,9 +1568,11 @@ export default function App() {
             <button
               id="nav-badges"
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("badges");
-                setQuizMode("none");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("badges");
+                  setQuizMode("none");
+                });
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                 currentTab === "badges" && quizMode === "none"
@@ -1822,6 +1906,61 @@ export default function App() {
                     <span className="text-xs text-slate-450 font-sans">تم تسجيل الدخول لولي الأمر بنجاح ✅</span>
                   </div>
 
+                  {/* Parent Quiz Exit PIN Management Card */}
+                  <div className="bg-[#100c1e] border border-amber-500/30 rounded-2xl p-4 md:p-5 space-y-3 text-right">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-indigo-950/60 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                        <h5 className="font-serif font-bold text-xs sm:text-sm text-slate-100">
+                          كلمة مرور قفل الاختبارات (Parent PIN) 🔒
+                        </h5>
+                      </div>
+                      <span className="text-[11px] text-amber-400 font-mono bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+                        الكلمة الحالية: {parentQuizPin}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                      تُستخدم هذه الكلمة لمنع الطالب من الخروج أو مغادرة شاشة الامتحانات والاختبارات قبل إنهاء الحل. يمكنك تحديثها أو إنشاء كلمة جديدة متى شئت:
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+                      <input
+                        type="text"
+                        value={parentSettingsNewPin}
+                        onChange={(e) => {
+                          setParentSettingsNewPin(e.target.value);
+                          setParentSettingsPinSuccess("");
+                        }}
+                        placeholder="أدخل كلمة مرور جديدة (مثال: 7788 أو dad2026)"
+                        className="w-full sm:flex-1 p-2.5 rounded-xl bg-[#18132d] border border-indigo-900 text-white font-mono text-center text-xs focus:outline-none focus:border-amber-400"
+                      />
+                      <button
+                        onClick={() => {
+                          if (parentSettingsNewPin.trim().length >= 3) {
+                            handleUpdateParentPin(parentSettingsNewPin.trim());
+                            handlePlaySound("levelup");
+                            setParentSettingsPinSuccess("تم تحديث كلمة مرور ولي الأمر بنجاح!");
+                            setParentSettingsNewPin("");
+                            setTimeout(() => setParentSettingsPinSuccess(""), 3000);
+                          } else {
+                            handlePlaySound("fail");
+                          }
+                        }}
+                        className="w-full sm:w-auto bg-amber-700 hover:bg-amber-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>حفظ الكلمة الجديدة</span>
+                      </button>
+                    </div>
+
+                    {parentSettingsPinSuccess && (
+                      <p className="text-xs text-emerald-400 font-bold animate-[fadeIn_0.2s_ease-out]">
+                        ✅ {parentSettingsPinSuccess}
+                      </p>
+                    )}
+                  </div>
+
                   {!lastQuizResult ? (
                     // Welcoming placeholder when no quizzes have been logged
                     <div className="text-center py-10 space-y-3 max-w-sm mx-auto">
@@ -2063,6 +2202,13 @@ export default function App() {
               onPlaySound={handlePlaySound}
               score={score}
               setScore={setScore}
+              parentPin={parentQuizPin}
+              onRequestExit={(action, isDirty) => {
+                requestExitQuiz(action, isDirty, "ورقة العمل والتقييم المدرسي");
+              }}
+              onWorksheetSolvingChange={(isSolving) => {
+                setIsWorksheetSolvingActive(isSolving);
+              }}
             />
           </div>
         )}
@@ -3522,8 +3668,7 @@ export default function App() {
           <div className="flex items-center justify-between border-b border-indigo-950/60 pb-3 mb-6 animate-[fadeIn_0.3s_ease-out]">
             <button
               onClick={() => {
-                handlePlaySound("click");
-                setQuizMode("none");
+                requestExitQuiz(() => setQuizMode("none"));
               }}
               className="bg-[#1b1930] hover:bg-[#252244] text-slate-100 text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-indigo-950/75 cursor-pointer shadow-sm"
             >
@@ -3925,14 +4070,35 @@ export default function App() {
             )}
       </main>
 
-      {/* Smart Algorithmic Curriculum Search with Voice Input */}
-      <SmartScholarSearch 
-        onSelectLesson={(unitId) => {
-          setSelectedUnitId(unitId);
-          setCurrentTab("unit");
-          setCurrentLessonIdx(0);
-          setBookPageIndex(0);
-        }} 
+      {/* Smart Algorithmic Curriculum Search with Voice Input - Hidden during quizzes and worksheets to maintain test integrity */}
+      {quizMode === "none" && currentTab !== "worksheets" && !isWorksheetSolvingActive && (
+        <SmartScholarSearch 
+          onSelectLesson={(unitId) => {
+            setSelectedUnitId(unitId);
+            setCurrentTab("unit");
+            setCurrentLessonIdx(0);
+            setBookPageIndex(0);
+          }} 
+        />
+      )}
+
+      {/* Parent Exit Lock Modal (Protects quiz exit with Father's PIN and auditory cue) */}
+      <ParentExitLockModal
+        isOpen={showParentExitModal}
+        onClose={() => setShowParentExitModal(false)}
+        onConfirmUnlock={() => {
+          setShowParentExitModal(false);
+          if (pendingExitAction) {
+            pendingExitAction();
+            setPendingExitAction(null);
+          } else {
+            setQuizMode("none");
+          }
+        }}
+        parentPin={parentQuizPin}
+        onUpdateParentPin={handleUpdateParentPin}
+        onPlaySound={handlePlaySound}
+        quizTitle={quizTitle}
       />
 
       {/* Visual bottom parchment style design separator */}
@@ -3942,8 +4108,10 @@ export default function App() {
           <div className="flex gap-4">
             <button
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("gallery");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("gallery");
+                });
               }}
               className="hover:text-amber-400 font-bold transition cursor-pointer"
             >
@@ -3952,8 +4120,10 @@ export default function App() {
             <span className="text-slate-500">•</span>
             <button
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("badges");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("badges");
+                });
               }}
               className="hover:text-amber-400 font-bold transition cursor-pointer"
             >
@@ -3962,8 +4132,10 @@ export default function App() {
             <span className="text-slate-500">•</span>
             <button
               onClick={() => {
-                handlePlaySound("click");
-                setCurrentTab("map");
+                requestExitQuiz(() => {
+                  handlePlaySound("click");
+                  setCurrentTab("map");
+                });
               }}
               className="hover:text-amber-400 font-bold transition cursor-pointer"
             >

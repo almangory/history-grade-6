@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   FileText, Printer, Check, CheckSquare, X, Lock, Unlock, 
-  RefreshCw, Info, Award, HelpCircle, Sparkles, CheckCircle2, XCircle
+  RefreshCw, Info, Award, HelpCircle, Sparkles, CheckCircle2, XCircle,
+  Maximize2, Minimize2, ZoomIn, ZoomOut, Monitor, ShieldAlert,
+  ArrowRight, CheckCheck, Eye
 } from "lucide-react";
 import { Question, Unit, QuestionType } from "../types";
 import { generateDynamicQuestions } from "../utils/questionGenerator";
@@ -19,6 +21,9 @@ interface WorksheetGeneratorProps {
   onPlaySound: (type: "click" | "success" | "fail" | "levelup") => void;
   score: number;
   setScore: React.Dispatch<React.SetStateAction<number>>;
+  parentPin?: string;
+  onRequestExit?: (action?: () => void, isDirty?: boolean) => void;
+  onWorksheetSolvingChange?: (isSolving: boolean) => void;
 }
 
 // Fixed Passcode for Watermark Removal
@@ -101,7 +106,10 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
   onToggleFavoriteLesson,
   onPlaySound,
   score,
-  setScore
+  setScore,
+  parentPin = "1234",
+  onRequestExit,
+  onWorksheetSolvingChange
 }) => {
   // Filters Settings State
   const [scopeType, setScopeType] = useState<"all" | "unit" | "lesson" | "favorites">("all");
@@ -135,6 +143,53 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [isEvaluated, setIsEvaluated] = useState<boolean>(false);
   const [evaluationScore, setEvaluationScore] = useState<{ correct: number; total: number; percentage: number } | null>(null);
+
+  // Fullscreen & Screen-Adaptive Scaling States
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [zoomScale, setZoomScale] = useState<number>(1);
+  const [isAutoFit, setIsAutoFit] = useState<boolean>(true);
+  const [screenWidth, setScreenWidth] = useState<number>(() => typeof window !== "undefined" ? window.innerWidth : 1024);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Inform parent when worksheet has active solving in progress
+  useEffect(() => {
+    const hasUnfinishedAnswers = Object.keys(userAnswers).length > 0 && !isEvaluated;
+    if (onWorksheetSolvingChange) {
+      onWorksheetSolvingChange(hasUnfinishedAnswers || isFullscreen);
+    }
+  }, [userAnswers, isEvaluated, isFullscreen, onWorksheetSolvingChange]);
+
+  // Window resize listener for responsive scaling and fit calculation
+  useEffect(() => {
+    const updateDimensions = () => {
+      const w = window.innerWidth;
+      setScreenWidth(w);
+      if (isAutoFit) {
+        if (w < 480) {
+          setZoomScale(0.72);
+        } else if (w < 640) {
+          setZoomScale(0.82);
+        } else if (w < 768) {
+          setZoomScale(0.9);
+        } else if (w < 1024) {
+          setZoomScale(1);
+        } else if (w >= 1440) {
+          setZoomScale(1.1);
+        } else {
+          setZoomScale(1);
+        }
+      }
+    };
+
+    updateDimensions();
+    window.addEventListener("resize", updateDimensions);
+    window.addEventListener("orientationchange", updateDimensions);
+    return () => {
+      window.removeEventListener("resize", updateDimensions);
+      window.removeEventListener("orientationchange", updateDimensions);
+    };
+  }, [isAutoFit]);
 
   // Keep lesson option synced when selectedUnitId shifts
   useEffect(() => {
@@ -285,66 +340,284 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
   };
 
   const handleResetAnswers = () => {
+    // If student has answered and not evaluated, request parent confirmation
+    const isDirty = Object.keys(userAnswers).length > 0 && !isEvaluated;
+    if (isDirty && onRequestExit) {
+      onRequestExit(() => {
+        onPlaySound("click");
+        setIsEvaluated(false);
+        setUserAnswers({});
+        setEvaluationScore(null);
+      }, true);
+      return;
+    }
+
     onPlaySound("click");
     setIsEvaluated(false);
     setUserAnswers({});
     setEvaluationScore(null);
   };
 
+  // Handle Fullscreen Toggle
+  const handleToggleFullscreen = () => {
+    onPlaySound("click");
+    
+    // Attempt native browser fullscreen if available
+    if (!isFullscreen) {
+      try {
+        if (containerRef.current && containerRef.current.requestFullscreen) {
+          containerRef.current.requestFullscreen().catch(() => {
+            // If native fullscreen restricted in iframe, state overlay fallback works perfectly
+          });
+        }
+      } catch (e) {
+        // Fallback to overlay
+      }
+      setIsFullscreen(true);
+    } else {
+      // Exiting fullscreen
+      const isDirty = Object.keys(userAnswers).length > 0 && !isEvaluated;
+      if (isDirty && onRequestExit) {
+        onRequestExit(() => {
+          if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+          setIsFullscreen(false);
+        }, true);
+        return;
+      }
+
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+      setIsFullscreen(false);
+    }
+  };
+
+  // Zoom Helpers
+  const handleZoomIn = () => {
+    onPlaySound("click");
+    setIsAutoFit(false);
+    setZoomScale(prev => Math.min(1.5, Number((prev + 0.1).toFixed(2))));
+  };
+
+  const handleZoomOut = () => {
+    onPlaySound("click");
+    setIsAutoFit(false);
+    setZoomScale(prev => Math.max(0.55, Number((prev - 0.1).toFixed(2))));
+  };
+
+  const handleResetZoomFit = () => {
+    onPlaySound("click");
+    setIsAutoFit(true);
+    if (screenWidth < 480) setZoomScale(0.72);
+    else if (screenWidth < 640) setZoomScale(0.82);
+    else if (screenWidth < 768) setZoomScale(0.9);
+    else if (screenWidth < 1024) setZoomScale(1);
+    else if (screenWidth >= 1440) setZoomScale(1.1);
+    else setZoomScale(1);
+  };
+
+  // Total answers count helper
+  const totalAnswersGiven = Object.keys(userAnswers).length;
+
   return (
-    <div className="space-y-6 text-right font-sans" dir="rtl">
-      {/* SECTION HEADER */}
-      <div className="no-print bg-[#121020] rounded-2xl border border-indigo-950/80 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 select-none">
-        <div>
-          <span className="bg-amber-500/10 text-amber-300 text-xs px-2.5 py-0.5 rounded-full font-bold border border-amber-500/20 font-sans">
-            أوراق العمل والتقييم الذاتي A4
-          </span>
-          <h2 className="text-2xl font-bold font-serif text-amber-400 mt-1.5 flex items-center gap-2">
-            <FileText className="w-7 h-7 text-amber-500 shrink-0" />
-            حل وتصحيح أوراق العمل A4 تفاعلياً بالموقع
-          </h2>
-          <p className="text-slate-300 text-sm mt-1 font-sans">
-            يمكنك حل الأسئلة مباشرة على الصفحة وتصحيحها فوراً للحصول على النتيجة والدرجة مع إظهار الإجابات النموذجية الصحيحة تحت كل سؤال!
-          </p>
-        </div>
+    <div 
+      ref={containerRef}
+      className={`space-y-6 text-right font-sans transition-all duration-300 ${
+        isFullscreen 
+          ? "fixed inset-0 z-50 overflow-y-auto bg-[#0b0918] p-3 sm:p-6 md:p-8" 
+          : "relative"
+      }`} 
+      dir="rtl"
+    >
+      {/* FULLSCREEN PERSISTENT FLOATING TOOLBAR */}
+      {isFullscreen && (
+        <div className="sticky top-0 z-40 bg-[#141026]/95 backdrop-blur-md border-b border-amber-500/40 p-3 sm:p-4 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 select-none mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30">
+              <Monitor className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-serif font-black text-amber-400 text-sm sm:text-base">
+                  وضع العرض بملء الشاشة ⛶
+                </span>
+                <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                  متوافق مع أبعاد الشاشة
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 hidden sm:block">
+                تم ضبط العرض ليتناسب تلقائياً مع حجم شاشتك ({Math.round(zoomScale * 100)}%)
+              </p>
+            </div>
+          </div>
 
-        <div className="flex gap-2 shrink-0">
-          <button
-            onClick={() => {
-              onPlaySound("click");
-              setWorksheetMode("print");
-            }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 ${
-              worksheetMode === "print"
-                ? "bg-amber-500 text-slate-950 font-black shadow-md"
-                : "bg-[#18152c] text-indigo-200 border border-indigo-950/50 hover:bg-[#201c3e]"
-            }`}
-          >
-            📄 نموذج ورقة A4 التفاعلية
-          </button>
-          <button
-            onClick={() => {
-              onPlaySound("click");
-              setWorksheetMode("interactive");
-            }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 ${
-              worksheetMode === "interactive"
-                ? "bg-amber-500 text-slate-950 font-black shadow-md"
-                : "bg-[#18152c] text-indigo-200 border border-indigo-950/50 hover:bg-[#201c3e]"
-            }`}
-          >
-            🧩 النمط الداكن السريع
-          </button>
-        </div>
-      </div>
+          {/* Center: Zoom Controls & Fit */}
+          <div className="flex items-center gap-1.5 bg-[#1a1532] border border-indigo-950 px-2 py-1 rounded-xl">
+            <button
+              onClick={handleZoomOut}
+              title="تصغير العرض"
+              className="p-1.5 rounded-lg hover:bg-[#251e45] text-slate-200 hover:text-amber-400 transition cursor-pointer text-xs flex items-center gap-1"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            
+            <span className="text-[11px] font-bold text-amber-300 px-1.5 min-w-[42px] text-center font-sans">
+              {Math.round(zoomScale * 100)}%
+            </span>
 
-      {/* FILTER & GENERATION PANEL */}
+            <button
+              onClick={handleZoomIn}
+              title="تكبير العرض"
+              className="p-1.5 rounded-lg hover:bg-[#251e45] text-slate-200 hover:text-amber-400 transition cursor-pointer text-xs flex items-center gap-1"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={handleResetZoomFit}
+              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition border cursor-pointer ${
+                isAutoFit 
+                  ? "bg-amber-500 text-slate-950 border-amber-400" 
+                  : "bg-[#251e45] text-slate-300 border-indigo-900/50 hover:text-white"
+              }`}
+            >
+              ملاءمة الشاشة ✨
+            </button>
+          </div>
+
+          {/* Right Action buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleEvaluateWorksheet}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shadow cursor-pointer"
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">{isEvaluated ? "إعادة التصحيح" : "تصحيح الورقة"}</span>
+              <span className="sm:hidden">تصحيح</span>
+            </button>
+
+            <button
+              onClick={handlePrint}
+              className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs px-3 py-2 rounded-xl transition flex items-center gap-1 cursor-pointer shadow"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="hidden sm:inline">طباعة</span>
+            </button>
+
+            <button
+              onClick={handleToggleFullscreen}
+              className="bg-rose-950/80 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-800/80 font-bold text-xs px-3 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Minimize2 className="w-4 h-4" />
+              <span>مغادرة ملء الشاشة</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION HEADER (Hidden in print) */}
+      {!isFullscreen && (
+        <div className="no-print bg-[#121020] rounded-2xl border border-indigo-950/80 p-5 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 select-none">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="bg-amber-500/10 text-amber-300 text-xs px-2.5 py-0.5 rounded-full font-bold border border-amber-500/20 font-sans">
+                أوراق العمل والتقييم الذاتي A4
+              </span>
+              {totalAnswersGiven > 0 && !isEvaluated && (
+                <span className="bg-rose-950/80 text-rose-300 border border-rose-800/60 text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse flex items-center gap-1">
+                  <ShieldAlert className="w-3 h-3 text-rose-400" />
+                  <span>محمية بقفل ولي الأمر</span>
+                </span>
+              )}
+            </div>
+            <h2 className="text-xl md:text-2xl font-bold font-serif text-amber-400 mt-1.5 flex items-center gap-2">
+              <FileText className="w-6 h-6 md:w-7 md:h-7 text-amber-500 shrink-0" />
+              <span>حل وتصحيح أوراق العمل A4 تفاعلياً بالموقع</span>
+            </h2>
+            <p className="text-slate-300 text-xs md:text-sm mt-1 font-sans">
+              يمكنك حل الأسئلة مباشرة على الصفحة وتصحيحها فوراً للحصول على النتيجة والدرجة مع إظهار الإجابات النموذجية الصحيحة تحت كل سؤال!
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Fullscreen Trigger Button */}
+            <button
+              onClick={handleToggleFullscreen}
+              className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 shadow-md hover:scale-102 active:scale-98"
+            >
+              <Maximize2 className="w-4 h-4 text-amber-200" />
+              <span>فتح ملء الشاشة ⛶</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onPlaySound("click");
+                setWorksheetMode("print");
+              }}
+              className={`px-3.5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 ${
+                worksheetMode === "print"
+                  ? "bg-amber-500 text-slate-950 font-black shadow-md"
+                  : "bg-[#18152c] text-indigo-200 border border-indigo-950/50 hover:bg-[#201c3e]"
+              }`}
+            >
+              📄 نموذج A4
+            </button>
+            <button
+              onClick={() => {
+                onPlaySound("click");
+                setWorksheetMode("interactive");
+              }}
+              className={`px-3.5 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 ${
+                worksheetMode === "interactive"
+                  ? "bg-amber-500 text-slate-950 font-black shadow-md"
+                  : "bg-[#18152c] text-indigo-200 border border-indigo-950/50 hover:bg-[#201c3e]"
+              }`}
+            >
+              🧩 النمط الداكن
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FILTER & GENERATION PANEL (Hidden during print) */}
       <div className="no-print bg-[#15122b] rounded-2xl border border-indigo-950/80 p-5 space-y-4 shadow-lg">
-        <h3 className="text-amber-400 font-serif font-bold text-lg flex items-center gap-1.5 border-b border-indigo-950/50 pb-2">
-          <span>⚙️ إعدادات ورقة العمل والأسئلة</span>
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-950/50 pb-2">
+          <h3 className="text-amber-400 font-serif font-bold text-base md:text-lg flex items-center gap-1.5">
+            <span>⚙️ إعدادات ورقة العمل ونطاق الأسئلة</span>
+          </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Quick Zoom & Screen Fit Bar */}
+          <div className="flex items-center gap-1.5 bg-[#1b1930] px-2.5 py-1 rounded-xl border border-indigo-950">
+            <span className="text-[11px] text-slate-400 font-bold hidden sm:inline">أبعاد الشاشة:</span>
+            <button
+              onClick={handleZoomOut}
+              title="تصغير"
+              className="p-1 rounded hover:bg-[#252244] text-slate-300 hover:text-amber-400 transition"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[10px] text-amber-300 font-bold px-1">{Math.round(zoomScale * 100)}%</span>
+            <button
+              onClick={handleZoomIn}
+              title="تكبير"
+              className="p-1 rounded hover:bg-[#252244] text-slate-300 hover:text-amber-400 transition"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleResetZoomFit}
+              className={`text-[9px] px-2 py-0.5 rounded font-bold transition border ${
+                isAutoFit ? "bg-amber-500 text-slate-950 border-amber-400" : "bg-[#252244] text-slate-300 border-indigo-900"
+              }`}
+            >
+              تلقائي
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {/* Scope Filters */}
           <div className="space-y-1.5">
             <label className="text-slate-300 text-xs font-semibold">نطاق المنهج المستهدف:</label>
@@ -448,56 +721,66 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
 
         {/* Question Type Selection Checkboxes */}
         <div className="space-y-1.5">
-          <label className="text-slate-300 text-xs font-semibold block">أنواع الأسئلة في ورقة العمل:</label>
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-2 bg-[#1b1930]/40 p-3 rounded-xl border border-indigo-950/45">
-            <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer select-none">
+          <label className="text-slate-300 text-xs font-semibold">أنواع الأسئلة المضمنة:</label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+            <label className="flex items-center gap-2 bg-[#1b1930] p-2 rounded-xl border border-indigo-950 cursor-pointer hover:border-amber-500/50">
               <input
                 type="checkbox"
                 checked={typesSelected.mcq}
                 onChange={(e) => setTypesSelected({ ...typesSelected, mcq: e.target.checked })}
-                className="rounded text-amber-500 focus:ring-amber-500 accent-amber-500 w-4 h-4"
+                className="rounded accent-amber-500"
               />
-              <span>اختيار من متعدد (MCQ)</span>
+              <span className="text-slate-200">اختيار متعدد 🔘</span>
             </label>
 
-            <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer select-none">
+            <label className="flex items-center gap-2 bg-[#1b1930] p-2 rounded-xl border border-indigo-950 cursor-pointer hover:border-amber-500/50">
               <input
                 type="checkbox"
                 checked={typesSelected.tf}
                 onChange={(e) => setTypesSelected({ ...typesSelected, tf: e.target.checked })}
-                className="rounded text-amber-500 focus:ring-amber-500 accent-amber-500 w-4 h-4"
+                className="rounded accent-amber-500"
               />
-              <span>الصواب والخطأ (صواب / خطأ)</span>
+              <span className="text-slate-200">صح وخطأ ✔️</span>
             </label>
 
-            <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer select-none">
+            <label className="flex items-center gap-2 bg-[#1b1930] p-2 rounded-xl border border-indigo-950 cursor-pointer hover:border-amber-500/50">
               <input
                 type="checkbox"
                 checked={typesSelected.blank}
                 onChange={(e) => setTypesSelected({ ...typesSelected, blank: e.target.checked })}
-                className="rounded text-amber-500 focus:ring-amber-500 accent-amber-500 w-4 h-4"
+                className="rounded accent-amber-500"
               />
-              <span>أكمل الفراغات</span>
+              <span className="text-slate-200">إكمال فراغات ✏️</span>
             </label>
 
-            <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer select-none">
+            <label className="flex items-center gap-2 bg-[#1b1930] p-2 rounded-xl border border-indigo-950 cursor-pointer hover:border-amber-500/50">
+              <input
+                type="checkbox"
+                checked={typesSelected.match}
+                onChange={(e) => setTypesSelected({ ...typesSelected, match: e.target.checked })}
+                className="rounded accent-amber-500"
+              />
+              <span className="text-slate-200">توصيل ومطابقة 🧩</span>
+            </label>
+
+            <label className="flex items-center gap-2 bg-[#1b1930] p-2 rounded-xl border border-indigo-950 cursor-pointer hover:border-amber-500/50">
               <input
                 type="checkbox"
                 checked={typesSelected.essay}
                 onChange={(e) => setTypesSelected({ ...typesSelected, essay: e.target.checked })}
-                className="rounded text-amber-500 focus:ring-amber-500 accent-amber-500 w-4 h-4"
+                className="rounded accent-amber-500"
               />
-              <span className="text-amber-400 font-semibold">الأسئلة المقالية ✍️</span>
+              <span className="text-slate-200">مقالي وتحليل 📜</span>
             </label>
 
-            <label className="flex items-center gap-1.5 text-xs text-slate-200 cursor-pointer select-none">
+            <label className="flex items-center gap-2 bg-[#1b1930] p-2 rounded-xl border border-indigo-950 cursor-pointer hover:border-amber-500/50">
               <input
                 type="checkbox"
                 checked={typesSelected.diagram}
                 onChange={(e) => setTypesSelected({ ...typesSelected, diagram: e.target.checked })}
-                className="rounded text-amber-500 focus:ring-amber-500 accent-amber-500 w-4 h-4"
+                className="rounded accent-teal-500"
               />
-              <span className="text-teal-400 font-semibold">الخرائط والرسوم الهندسية 🗺️</span>
+              <span className="text-teal-400 font-semibold">خرائط ورسوم 🗺️</span>
             </label>
           </div>
         </div>
@@ -506,16 +789,16 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <button
             onClick={handleGenerateWorksheets}
-            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-serif font-black text-sm px-6 py-3 rounded-xl transition duration-150 transform hover:scale-102 active:scale-98 flex items-center gap-2 cursor-pointer shadow-md"
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-serif font-black text-xs sm:text-sm px-5 py-2.5 rounded-xl transition duration-150 transform hover:scale-102 active:scale-98 flex items-center gap-2 cursor-pointer shadow-md"
           >
             <RefreshCw className="w-4 h-4 shrink-0" />
             <span>توليد ورقة عمل جديدة 🚀</span>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleEvaluateWorksheet}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm px-5 py-3 rounded-xl transition flex items-center gap-2 shadow-md cursor-pointer"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-md cursor-pointer"
             >
               <CheckSquare className="w-4 h-4" />
               <span>{isEvaluated ? "إعادة التصحيح وحساب الدرجة" : "تصحيح ورقة العمل وإظهار الإجابات ✅"}</span>
@@ -524,7 +807,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
             {isEvaluated && (
               <button
                 onClick={handleResetAnswers}
-                className="bg-indigo-950/80 hover:bg-indigo-900 text-slate-200 border border-indigo-800 text-xs px-4 py-3 rounded-xl transition cursor-pointer"
+                className="bg-indigo-950/80 hover:bg-indigo-900 text-slate-200 border border-indigo-800 text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer"
               >
                 مسح الإجابات 🔄
               </button>
@@ -533,7 +816,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
             <button
               onClick={handlePrint}
               disabled={generatedPages.length === 0}
-              className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs px-4 py-3 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-md"
+              className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-md"
             >
               <Printer className="w-4 h-4" />
               <span>طباعة A4 🖨️</span>
@@ -544,22 +827,22 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
 
       {/* EVALUATION RESULTS CARD (Shown when graded) */}
       {isEvaluated && evaluationScore && (
-        <div className="bg-gradient-to-r from-[#172033] via-[#1a1738] to-[#172033] border-2 border-amber-500/50 rounded-2xl p-6 shadow-2xl space-y-4 animate-[fadeIn_0.3s_ease-out]">
+        <div className="bg-gradient-to-r from-[#172033] via-[#1a1738] to-[#172033] border-2 border-amber-500/50 rounded-2xl p-5 md:p-6 shadow-2xl space-y-4 animate-[fadeIn_0.3s_ease-out]">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className={`p-4 rounded-2xl border ${
+              <div className={`p-3.5 md:p-4 rounded-2xl border ${
                 evaluationScore.percentage >= 80 
                   ? "bg-emerald-950/80 border-emerald-500/60 text-emerald-400" 
                   : evaluationScore.percentage >= 50 
                   ? "bg-amber-950/80 border-amber-500/60 text-amber-400" 
                   : "bg-red-950/80 border-red-500/60 text-red-400"
               }`}>
-                <Award className="w-10 h-10 animate-bounce" />
+                <Award className="w-8 h-8 md:w-10 md:h-10 animate-bounce" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl font-black text-amber-400 font-serif">نتيجة التقييم الفوري:</span>
-                  <span className={`text-2xl font-black px-3 py-0.5 rounded-lg ${
+                  <span className="text-xl md:text-2xl font-black text-amber-400 font-serif">نتيجة التقييم الفوري:</span>
+                  <span className={`text-xl md:text-2xl font-black px-3 py-0.5 rounded-lg ${
                     evaluationScore.percentage >= 80 
                       ? "bg-emerald-500/20 text-emerald-300" 
                       : evaluationScore.percentage >= 50 
@@ -569,7 +852,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                     {evaluationScore.percentage}%
                   </span>
                 </div>
-                <p className="text-slate-200 text-sm">
+                <p className="text-slate-200 text-xs md:text-sm">
                   أجبت بصحة على <strong className="text-emerald-400 text-base">{evaluationScore.correct}</strong> من إجمالي <strong className="text-slate-100 text-base">{evaluationScore.total}</strong> سؤال ونقطة تقييم.
                 </p>
               </div>
@@ -603,11 +886,11 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
       )}
 
       {/* WATERMARK SETTINGS BAR (When in print mode) */}
-      {worksheetMode === "print" && (
+      {worksheetMode === "print" && !isFullscreen && (
         <div className="no-print bg-[#181530] rounded-2xl p-4 border border-indigo-950 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${removeWatermark ? "bg-emerald-950/50 text-emerald-400" : "bg-amber-950/50 text-amber-400"}`}>
-              {removeWatermark ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
+              {removeWatermark ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
             </div>
             <div>
               <h4 className="font-bold text-sm text-slate-200">التحكم في العلامة المائية للطباعة</h4>
@@ -659,14 +942,21 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
         </div>
       )}
 
-      {/* WORKSHEET DISPLAY ZONE */}
+      {/* WORKSHEET DISPLAY ZONE (Dynamically Scaled according to Zoom & Screen Width) */}
       {generatedPages.length > 0 && (
-        <div className="space-y-8">
+        <div 
+          className="space-y-8 flex flex-col items-center transition-transform duration-200 origin-top"
+          style={{
+            transform: zoomScale !== 1 ? `scale(${zoomScale})` : undefined,
+            width: zoomScale !== 1 ? `${(100 / zoomScale).toFixed(1)}%` : "100%",
+            maxWidth: "100%"
+          }}
+        >
           {worksheetMode === "print" ? (
             /* =========================================================================
                A. INTERACTIVE A4 PRINTABLE WORKSHEET VIEW (Solvable on real A4 layout)
                ========================================================================= */
-            <div className="space-y-8 flex flex-col items-center">
+            <div className="space-y-8 flex flex-col items-center w-full">
               <div className="no-print text-center pb-1">
                 <span className="text-amber-400 text-xs font-bold bg-amber-950/30 border border-amber-900/40 px-4 py-1.5 rounded-full inline-flex items-center gap-1.5">
                   💡 يمكنك حل الأسئلة مباشرة على ورقة A4 هذه ثم النقر على زر "تصحيح ورقة العمل" بالأعلى لمعرفة نتيجتك!
@@ -677,12 +967,12 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                 <div
                   key={page.pageNumber}
                   id={`printable-page-${page.pageNumber}`}
-                  className="relative bg-white text-slate-900 p-6 md:p-10 border border-slate-300 shadow-2xl rounded-sm w-full max-w-[210mm] min-h-[297mm] overflow-hidden flex flex-col justify-between font-serif selection:bg-slate-200"
+                  className="relative bg-white text-slate-900 p-5 sm:p-8 md:p-10 border border-slate-300 shadow-2xl rounded-sm w-full max-w-[210mm] min-h-[297mm] overflow-hidden flex flex-col justify-between font-serif selection:bg-slate-200"
                 >
                   {/* WATERMARK OVERLAY */}
                   {!removeWatermark && (
                     <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center opacity-[0.05] select-none z-0">
-                      <div className="text-center font-black text-slate-800 rotate-[-35deg] text-5xl tracking-widest whitespace-nowrap uppercase leading-none select-none">
+                      <div className="text-center font-black text-slate-800 rotate-[-35deg] text-3xl sm:text-5xl tracking-widest whitespace-nowrap uppercase leading-none select-none">
                         تاريخ الصف السادس الابتدائي <br />
                         تاريخ الصف السادس الابتدائي <br />
                         تاريخ الصف السادس الابتدائي <br />
@@ -696,14 +986,14 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                     {/* Header Section */}
                     <div className="border-b-4 border-slate-900 pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                       <div>
-                        <h1 className="text-xl font-black text-slate-950 tracking-tight flex items-center gap-1.5">
+                        <h1 className="text-lg sm:text-xl font-black text-slate-950 tracking-tight flex items-center gap-1.5">
                           <span>ورقة عمل التاريخ والتربية الوطنية 🏛️</span>
-                          <span className="text-[11px] border border-slate-900 text-slate-900 font-sans font-bold px-2 py-0.5 rounded">الصف السادس</span>
+                          <span className="text-[10px] sm:text-[11px] border border-slate-900 text-slate-900 font-sans font-bold px-2 py-0.5 rounded">الصف السادس</span>
                         </h1>
-                        <p className="text-[11px] text-slate-600 font-sans mt-0.5 font-medium leading-none">وزارة التربية والتعليم - المركز القومي للمناهج والبحث التربوي (بخت الرضا)</p>
+                        <p className="text-[10px] sm:text-[11px] text-slate-600 font-sans mt-0.5 font-medium leading-none">وزارة التربية والتعليم - المركز القومي للمناهج والبحث التربوي (بخت الرضا)</p>
                       </div>
 
-                      <div className="text-right text-[11px] text-slate-700 font-sans space-y-0.5 border-r-2 sm:border-r-0 sm:border-l-2 border-slate-300 pr-2 sm:pr-0 sm:pl-3">
+                      <div className="text-right text-[10px] sm:text-[11px] text-slate-700 font-sans space-y-0.5 border-r-2 sm:border-r-0 sm:border-l-2 border-slate-300 pr-2 sm:pr-0 sm:pl-3">
                         <div>التاريخ: .....................</div>
                         <div>اسم التلميذ: .......................................</div>
                         <div>المدرسة: .......................................</div>
@@ -711,7 +1001,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                     </div>
 
                     {/* Metadata Ribbon */}
-                    <div className="bg-slate-100 p-2.5 rounded border border-slate-300 flex justify-between items-center text-[11px] text-slate-800 font-sans">
+                    <div className="bg-slate-100 p-2.5 rounded border border-slate-300 flex justify-between items-center text-[10px] sm:text-[11px] text-slate-800 font-sans">
                       <div>
                         <strong>النطاق:</strong> {page.scopeText}
                       </div>
@@ -721,7 +1011,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                     </div>
 
                     {/* Questions List */}
-                    <div className="space-y-6 pt-2">
+                    <div className="space-y-5 sm:space-y-6 pt-2">
                       {page.questions.map((q, idx) => {
                         const ansKey = `${page.pageNumber}-${idx}`;
                         const userChoice = userAnswers[ansKey] || "";
@@ -730,7 +1020,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                         return (
                           <div 
                             key={idx} 
-                            className={`p-3.5 rounded-xl border transition-all ${
+                            className={`p-3 sm:p-3.5 rounded-xl border transition-all ${
                               isEvaluated 
                                 ? isAnswerCorrect 
                                   ? "bg-emerald-50/70 border-emerald-300" 
@@ -739,7 +1029,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                             }`}
                           >
                             {/* Question Title */}
-                            <div className="font-bold text-sm text-slate-950 flex items-start gap-2 leading-relaxed">
+                            <div className="font-bold text-xs sm:text-sm text-slate-950 flex items-start gap-2 leading-relaxed">
                               <span className="bg-slate-900 text-white font-sans text-xs px-2 py-0.5 rounded shrink-0">
                                 س{idx + 1}
                               </span>
@@ -747,7 +1037,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                             </div>
 
                             {/* Options according to type */}
-                            <div className="mt-3 mr-7">
+                            <div className="mt-2.5 sm:mt-3 mr-4 sm:mr-7">
                               {/* MCQ */}
                               {q.type === QuestionType.MCQ && q.options && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-sans">
@@ -764,7 +1054,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                                           onPlaySound("click");
                                           setUserAnswers({ ...userAnswers, [ansKey]: opt });
                                         }}
-                                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-right transition cursor-pointer ${
+                                        className={`flex items-center gap-2 p-2 sm:p-2.5 rounded-lg border text-right transition cursor-pointer ${
                                           isSelected
                                             ? "bg-amber-100 border-amber-600 font-bold text-slate-950"
                                             : "bg-slate-50 border-slate-300 text-slate-800 hover:bg-slate-100"
@@ -784,7 +1074,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
 
                               {/* TRUE / FALSE */}
                               {q.type === QuestionType.TRUE_FALSE && (
-                                <div className="flex items-center gap-4 text-xs font-sans font-bold">
+                                <div className="flex items-center gap-3 sm:gap-4 text-xs font-sans font-bold">
                                   {["صواب", "خطأ"].map((opt) => {
                                     const isSelected = userChoice === opt;
                                     const isThisCorrect = opt.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
@@ -798,7 +1088,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                                           onPlaySound("click");
                                           setUserAnswers({ ...userAnswers, [ansKey]: opt });
                                         }}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition cursor-pointer ${
+                                        className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-lg border transition cursor-pointer ${
                                           isSelected
                                             ? "bg-amber-100 border-amber-600 text-slate-950 font-black shadow-sm"
                                             : "bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100"
@@ -838,7 +1128,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                                     placeholder="اكتب إجابتك وصياغتك التاريخية هنا..."
                                     value={userChoice}
                                     onChange={(e) => setUserAnswers({ ...userAnswers, [ansKey]: e.target.value })}
-                                    className="w-full h-24 bg-slate-50 border border-slate-300 focus:border-amber-600 p-2.5 text-xs text-slate-950 outline-none rounded-lg leading-relaxed"
+                                    className="w-full h-20 sm:h-24 bg-slate-50 border border-slate-300 focus:border-amber-600 p-2.5 text-xs text-slate-950 outline-none rounded-lg leading-relaxed"
                                   />
                                 </div>
                               )}
@@ -890,7 +1180,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
 
                             {/* MANDATORY ACCREDITED ANSWER CORRECTION BOX (Under EVERY Question) */}
                             {isEvaluated && (
-                              <div className={`mt-3 mr-7 p-3 rounded-xl border text-xs font-sans space-y-1.5 animate-[fadeIn_0.3s_ease-out] ${
+                              <div className={`mt-3 mr-4 sm:mr-7 p-3 rounded-xl border text-xs font-sans space-y-1.5 animate-[fadeIn_0.3s_ease-out] ${
                                 q.type === "diagram"
                                   ? "bg-slate-100 border-slate-300"
                                   : isAnswerCorrect
@@ -969,10 +1259,10 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
             /* =========================================================================
                B. DARK THEME INTERACTIVE SOLVING MODE
                ========================================================================= */
-            <div className="bg-[#121020] rounded-2xl border border-indigo-950 p-6 space-y-6 shadow-inner">
+            <div className="bg-[#121020] rounded-2xl border border-indigo-950 p-5 md:p-6 space-y-6 shadow-inner w-full">
               <div className="border-b border-indigo-950/60 pb-3 flex items-center justify-between">
                 <div>
-                  <span className="text-amber-400 font-serif font-extrabold text-xl">
+                  <span className="text-amber-400 font-serif font-extrabold text-lg md:text-xl">
                     📝 الحل والتصحيح بالنمط الداكن
                   </span>
                   <p className="text-slate-400 text-xs mt-1">
@@ -982,7 +1272,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
               </div>
 
               {generatedPages.map((page) => (
-                <div key={page.pageNumber} className="bg-[#16132d]/40 rounded-xl p-5 border border-indigo-950/50 space-y-4">
+                <div key={page.pageNumber} className="bg-[#16132d]/40 rounded-xl p-4 sm:p-5 border border-indigo-950/50 space-y-4">
                   <div className="flex items-center justify-between border-b border-indigo-950/30 pb-2">
                     <h4 className="text-slate-200 font-bold text-sm flex items-center gap-2">
                       <span className="w-5 h-5 bg-[#1b1930] border border-amber-500/20 text-amber-400 rounded flex items-center justify-center text-xs">
@@ -1012,7 +1302,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
 
                           {/* MCQ */}
                           {q.type === QuestionType.MCQ && q.options && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 font-serif">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-serif">
                               {q.options.map((opt) => {
                                 const isSelected = userChoice === opt;
                                 return (
@@ -1049,7 +1339,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                                       onPlaySound("click");
                                       setUserAnswers({ ...userAnswers, [ansKey]: opt });
                                     }}
-                                    className={`px-5 py-2 rounded-lg border text-xs font-bold transition cursor-pointer ${
+                                    className={`px-4 sm:px-5 py-2 rounded-lg border text-xs font-bold transition cursor-pointer ${
                                       isSelected
                                         ? "bg-amber-500/20 border-amber-500 text-amber-300 font-black"
                                         : "bg-[#1b1930]/45 border-indigo-950 hover:border-amber-500/30 text-slate-300"
@@ -1084,7 +1374,7 @@ export const WorksheetGenerator: React.FC<WorksheetGeneratorProps> = ({
                                 placeholder="اكتب مقالك التاريخي هنا..."
                                 value={userChoice}
                                 onChange={(e) => setUserAnswers({ ...userAnswers, [ansKey]: e.target.value })}
-                                className="w-full h-24 bg-[#18152c] border border-indigo-950 rounded-lg p-3 text-xs text-slate-100 focus:outline-none focus:border-amber-400 leading-relaxed"
+                                className="w-full h-20 sm:h-24 bg-[#18152c] border border-indigo-950 rounded-lg p-3 text-xs text-slate-100 focus:outline-none focus:border-amber-400 leading-relaxed"
                               />
                             </div>
                           )}
