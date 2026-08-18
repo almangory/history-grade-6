@@ -12,10 +12,12 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { message, history } = req.body || {};
-
-    if (!message) {
+    if (!message || typeof message !== "string" || !message.trim()) {
       return res.status(400).json({ error: "الرجاء إدخال نص السؤال." });
+    }
+
+    if (message.length > 500) {
+      return res.status(400).json({ error: "نص السؤال طويل جداً، يرجى كتابة سؤال مختصر (أقل من 500 حرف)." });
     }
 
     const isKeyAvailable = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY";

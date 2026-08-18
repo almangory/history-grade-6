@@ -60,7 +60,8 @@ service cloud.firestore {
 
         allow list, get: if isOwner(userId);
         allow create: if isOwner(userId) && isValidChatMessage(request.resource.data);
-        allow update, delete: if false; // AI Tutor history is append-only
+        allow delete: if isOwner(userId);
+        allow update: if false;
       }
     }
   }
